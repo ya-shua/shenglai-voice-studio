@@ -95,11 +95,18 @@
     </div>
 
     <div id="wiz-design">
+      <div class="row">
+        <label>生成方式<select id="vd-provider">
+          <option value="mimo">小米 MiMo（免费）</option>
+          <option value="bailian">百炼 CosyVoice（付费）</option>
+        </select></label>
+        <label id="vd-model-row">目标模型<select id="vd-model"><option value="cosyvoice-v3.5-plus">cosyvoice-v3.5-plus</option><option value="cosyvoice-v3-plus">cosyvoice-v3-plus</option><option value="cosyvoice-v3-flash">cosyvoice-v3-flash</option></select></label>
+      </div>
+      <p class="hint" id="vd-mimo-hint">MiMo 文字造音色当前限时免费：一句描述直接生成音色，不需要任何素材。</p>
       <label>音色名<input id="vd-name" placeholder="例如：御姐音"></label>
       <label>声音描述<textarea id="vd-desc" rows="2" placeholder="性别＋年龄＋音色质感＋语气＋语速，例：年轻女性，声音清亮干净"></textarea></label>
       <div class="row">
         <label>试听文本<input id="vd-preview" placeholder="留空用默认"></label>
-        <label>目标模型<select id="vd-model"><option value="cosyvoice-v3.5-plus">cosyvoice-v3.5-plus</option><option value="cosyvoice-v3-plus">cosyvoice-v3-plus</option><option value="cosyvoice-v3-flash">cosyvoice-v3-flash</option></select></label>
       </div>
       <label><input type="checkbox" id="vd-save-mat" style="width:auto"> 试听音频存入素材库</label>
       <button id="vd-run" class="primary">✨ 生成并试听</button>

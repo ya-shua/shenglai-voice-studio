@@ -92,7 +92,7 @@ def design_voice(
     result = provider.design(
         description, preview, name, target_model, cfg, language=language
     )
-    status, detail = "unknown", ""
+    status, detail = str(result.get("status") or "unknown"), ""
     if "query" in provider.capabilities:
         def step():
             return provider.voice_status(result["voice_id"], cfg)
@@ -125,6 +125,7 @@ def design_voice(
         "target_model": result.get("target_model", ""),
         "status": "ready" if status == "ready" else status,
         "note": "AI生成：%s" % description.strip()[:80],
+        "design_prompt": result.get("design_prompt", ""),
         "materials": [m["name"] for m in library.list_materials(name)],
     }
     library.upsert_voice(entry)

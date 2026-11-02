@@ -307,13 +307,24 @@ function setCurrentAndRefresh(name) {
   if (first) toast("🎉 第一个音色就绪！已切换到「说话」，让它开口吧");
 }
 
+/* 造声音：百炼要选目标模型，MiMo 免费版不需要 */
+function syncDesignProvider() {
+  const prov = $("#vd-provider").value;
+  const row = $("#vd-model-row");
+  const hint = $("#vd-mimo-hint");
+  if (row) row.style.display = prov === "bailian" ? "" : "none";
+  if (hint) hint.hidden = prov !== "mimo";
+}
+
 async function runDesign() {
   const btn = $("#vd-run");
+  const provider = $("#vd-provider").value;
   const payload = {
     voice_name: $("#vd-name").value.trim(),
     description: $("#vd-desc").value.trim(),
     preview_text: $("#vd-preview").value.trim() || null,
-    target_model: $("#vd-model").value,
+    provider: provider,
+    target_model: provider === "bailian" ? $("#vd-model").value : "",
     save_preview_material: $("#vd-save-mat").checked,
   };
   if (!payload.voice_name || !payload.description) return toast("音色名与声音描述必填", false);
@@ -1184,6 +1195,8 @@ function wire() {
   // 发现：造声音
   $$(".wizintent").forEach((b) => b.addEventListener("click", () => switchIntent(b.dataset.intent)));
   on("#vd-run", "click", runDesign);
+  on("#vd-provider", "change", syncDesignProvider);
+  syncDesignProvider();
   on("#qc-run", "click", runClone);
   on("#pk-refresh", "click", loadPickCatalog);
   on("#pk-register", "click", registerPick);

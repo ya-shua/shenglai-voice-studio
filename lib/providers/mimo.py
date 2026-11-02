@@ -17,8 +17,12 @@ from __future__ import annotations
 
 import base64
 import json
+import uuid
 
 from lib.providers.base import Provider, ProviderError, http_send
+
+# 文字设计出来的音色没有云端 voice_id，用这个前缀标记，合成时按原描述重新演绎
+DESIGN_PREFIX = "mimo-design:"
 
 BUILTIN_VOICES = [
     {"voice_id": "mimo_default", "name": "默认音色", "tags": ["推荐"]},
@@ -126,11 +130,34 @@ class MiMoProvider(Provider):
             for v in BUILTIN_VOICES
         ]
 
+    def design(self, voice_prompt: str, preview_text: str, prefix: str,
+               target_model: str, cfg: dict, language: str = "zh") -> dict:
+        """文字描述造音色（当前免费）：直接生成试听音频，返回带描述的虚拟音色。"""
+        prompt = (voice_prompt or "").strip()
+        if not prompt:
+            raise ProviderError("声音设计需要音色描述（例：年轻女性，声音清亮干净）")
+        data = self.synthesize_mode("design", preview_text, voice_prompt=prompt, cfg=cfg)
+        return {
+            "voice_id": DESIGN_PREFIX + uuid.uuid4().hex[:8],
+            "preview": data,
+            "target_model": "mimo-v2.5-tts-voicedesign",
+            "status": "ready",
+            "design_prompt": prompt,
+        }
+
     def tts(self, text: str, voice_id: str, target_model: str, opts: dict,
             cfg: dict, voice_meta: dict | None = None):
         self.validate_config(cfg)
+        vid = str(voice_id or "")
+        # 文字设计出来的音色没有云端 ID：每次按存下来的描述重新演绎
+        if vid.startswith(DESIGN_PREFIX):
+            prompt = str((voice_meta or {}).get("design_prompt") or "").strip()
+            if not prompt:
+                raise ProviderError("这个 MiMo 设计音色缺少原始描述，无法合成；请重新生成一个")
+            data = self.synthesize_mode("design", text, voice_prompt=prompt, cfg=cfg)
+            return data, "wav"
         data = self.synthesize_mode(
             "builtin", text, style=str((opts or {}).get("style") or ""),
-            voice=str(voice_id or "mimo_default"), cfg=cfg,
+            voice=vid or "mimo_default", cfg=cfg,
         )
         return data, "wav"
