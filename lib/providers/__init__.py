@@ -3,11 +3,11 @@ from __future__ import annotations
 
 from lib import config
 from lib.providers.base import GenericTTSProvider, Provider, ProviderError
-from lib.providers import bailian, elevenlabs, fish, kits, mimo, siliconflow
+from lib.providers import bailian, elevenlabs, fish, kits, local_svc, mimo, siliconflow
 
 __all__ = ["get_provider", "list_providers", "Provider", "ProviderError"]
 
-_BUILTIN = ("bailian", "elevenlabs", "fish", "kits", "mimo", "siliconflow")
+_BUILTIN = ("bailian", "elevenlabs", "fish", "kits", "local-svc", "mimo", "siliconflow")
 
 
 def get_provider(provider_id: str) -> Provider:
@@ -19,6 +19,8 @@ def get_provider(provider_id: str) -> Provider:
         return fish.FishAudioProvider()
     if provider_id == "kits":
         return kits.KitsAIProvider()
+    if provider_id == "local-svc":
+        return local_svc.LocalSeedVCProvider()
     if provider_id == "mimo":
         return mimo.MiMoProvider()
     if provider_id == "siliconflow":
@@ -38,12 +40,16 @@ def list_providers() -> list[dict]:
     for pid in _BUILTIN:
         p = get_provider(pid)
         pcfg = cfg["providers"].get(pid, {})
+        if pid == "local-svc":
+            configured = bool(str(pcfg.get("svc_dir", "")).strip())
+        else:
+            configured = bool(str(pcfg.get("api_key", "")).strip())
         out.append(
             {
                 "id": p.id,
                 "display_name": p.display_name,
                 "capabilities": list(p.capabilities),
-                "configured": bool(str(pcfg.get("api_key", "")).strip()),
+                "configured": configured,
                 "config_schema": list(p.config_schema),
             }
         )

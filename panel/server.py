@@ -309,6 +309,7 @@ class Handler(BaseHTTPRequestHandler):
                 voice_name = urllib.parse.unquote((q.get("voice_name") or [""])[0])
                 strength = float((q.get("strength") or ["0.8"])[0] or 0.8)
                 pitch = int(float((q.get("pitch_shift") or ["0"])[0] or 0))
+                engine = (q.get("engine") or ["kits"])[0] or "kits"
                 filename = Path(urllib.parse.unquote(
                     self.headers.get("X-Filename") or "song.mp3")).name
                 incoming = config.data_root() / "materials" / "_incoming"
@@ -317,13 +318,13 @@ class Handler(BaseHTTPRequestHandler):
                 tmp.write_bytes(self._body_bytes())
                 try:
                     if route == "/api/kits/sing":
-                        result = flows.sing_cover(str(tmp), voice_name, strength, pitch)
+                        result = flows.sing_cover(str(tmp), voice_name, strength, pitch, engine=engine)
                         for key in ("vocal", "backing", "converted", "final"):
                             if result.get(key):
                                 result[key + "_url"] = "/api/outputs/file?name=" + urllib.parse.quote(
                                     Path(result[key]).name)
                     else:
-                        result = flows.convert_vocal(str(tmp), voice_name, strength, pitch)
+                        result = flows.convert_vocal(str(tmp), voice_name, strength, pitch, engine=engine)
                         result["url"] = "/api/outputs/file?name=" + urllib.parse.quote(
                             Path(result["path"]).name)
                 finally:

@@ -138,6 +138,7 @@
           <option value="siliconflow">硅基流动预置音色</option>
           <option value="elevenlabs">ElevenLabs</option>
           <option value="kits">Kits.AI（唱歌）</option>
+          <option value="local-svc">本地 Seed-VC（免费，填参考音频路径）</option>
         </select></label>
       </div>
       <div class="row">
@@ -198,9 +199,15 @@
       <div id="cover-check" class="hint">检查中…</div>
       <div id="cover-form" class="hidden">
         <div class="row">
-          <label>歌手音色（Kits.AI）<select id="sc-voice"></select>
+          <label>引擎<select id="sc-engine">
+            <option value="local-svc">本地 Seed-VC（免费）</option>
+            <option value="kits">Kits.AI（付费）</option>
+          </select></label>
+          <label>歌手音色<select id="sc-voice"></select>
             <button id="sc-reload" class="mini" type="button">刷新</button>
           </label>
+        </div>
+        <div class="row">
           <label>模式<select id="sc-mode"><option value="sing">整曲翻唱（分离→换声→混回伴奏）</option><option value="convert">清唱/干声换声</option></select></label>
         </div>
         <label>歌曲 / 干声文件<input id="sc-file" type="file" accept=".wav,.mp3,.flac,.webm"></label>

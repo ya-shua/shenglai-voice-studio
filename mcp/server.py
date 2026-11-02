@@ -260,6 +260,7 @@ def tool_convert(args: dict) -> str:
         args.get("voice_name") or "",
         strength=float(args.get("strength") or 0.8),
         pitch_shift=int(args.get("pitch_shift") or 0),
+        engine=(args.get("engine") or "kits"),
     )
     return (
         f"✅ 换声完成（音色「{r['voice']}」）\n"
@@ -274,6 +275,7 @@ def tool_sing(args: dict) -> str:
         args.get("voice_name") or "",
         strength=float(args.get("strength") or 0.8),
         pitch_shift=int(args.get("pitch_shift") or 0),
+        engine=(args.get("engine") or "kits"),
     )
     lines = [f"✅ 翻唱完成（{r['voice']} × {r['song']}）"]
     if r.get("final"):
@@ -604,16 +606,18 @@ TOOLS = [
     {
         "name": "voice_convert",
         "description": (
-            "清唱/干声换声：把一段人声音频换成 Kits.AI 音色（网页端多素材训练的唱歌音色）。"
+            "清唱/干声换声：把一段人声音频换成目标音色。默认 engine=kits（Kits.AI 网页端多素材训练的唱歌音色）；"
+            "engine=local-svc 用本机 Seed-VC（完全免费，音色 voice_id 填参考音频路径）。"
             "要出完整翻唱歌曲请用 voice_sing。strength 转换强度 0~1，pitch_shift 半音偏移 -24~24。"
         ),
         "inputSchema": {
             "type": "object",
             "properties": {
                 "audio_path": {"type": "string", "description": "干声文件（wav/mp3/flac）"},
-                "voice_name": {"type": "string", "description": "已登记的 Kits.AI 音色"},
+                "voice_name": {"type": "string", "description": "已登记的音色（对应引擎）"},
                 "strength": {"type": "number", "description": "0~1，默认 0.8"},
                 "pitch_shift": {"type": "integer", "description": "半音偏移，默认 0"},
+                "engine": {"type": "string", "enum": ["kits", "local-svc"], "description": "引擎，默认 kits"},
             },
             "required": ["audio_path", "voice_name"],
         },
@@ -621,16 +625,18 @@ TOOLS = [
     {
         "name": "voice_sing",
         "description": (
-            "稳定翻唱流水线：歌曲 → Kits.AI 人声/伴奏分离 → 人声换声 → 混回伴奏 → 成品。"
-            "伴奏全程不动只换人声，保证稳定性。需 Kits.AI Key 与已登记音色；云端处理约 1~5 分钟。"
+            "稳定翻唱流水线：歌曲 → 人声/伴奏分离 → 人声换声 → 混回伴奏 → 成品。"
+            "engine=local-svc 走本机 demucs + Seed-VC，全程免费（CPU 约 3~10 分钟）；"
+            "engine=kits 走云端（需 Key，约 1~5 分钟）。伴奏全程不动只换人声，保证稳定性。"
         ),
         "inputSchema": {
             "type": "object",
             "properties": {
                 "song_path": {"type": "string", "description": "歌曲文件（wav/mp3/flac/webm ≤50MB）"},
-                "voice_name": {"type": "string", "description": "已登记的 Kits.AI 音色"},
+                "voice_name": {"type": "string", "description": "已登记的音色（对应引擎）"},
                 "strength": {"type": "number", "description": "0~1，默认 0.8"},
                 "pitch_shift": {"type": "integer", "description": "半音偏移（适配音域），默认 0"},
+                "engine": {"type": "string", "enum": ["kits", "local-svc"], "description": "引擎，默认 kits"},
             },
             "required": ["song_path", "voice_name"],
         },

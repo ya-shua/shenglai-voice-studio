@@ -7,6 +7,28 @@
 
 ---
 
+## [1.4.0] - 2026-11-02
+
+### 新增（免费翻唱：本地 Seed-VC 引擎）
+- 「翻唱」页新增**引擎切换**：本地 Seed-VC（**完全免费**）/ Kits.AI（付费订阅）
+- 本地流水线：demucs 人声分离 → Seed-VC 零样本换声 → 混回伴奏，全程不联网不花钱
+- 新供应商 `local-svc`：填 Seed-VC 目录即可用（自动找 .venv311/.venv 的 Python）
+- `voice_sing` / `voice_convert` 新增 `engine` 参数（kits / local-svc）
+- 音色登记支持「本地 Seed-VC」：voice_id 填参考音频绝对路径（10~30 秒干声）
+
+### 修复
+- float32 wav 自动转 PCM16（Seed-VC/demucs 的输出格式，插件的纯 stdlib 混音器只认 PCM）
+- 混音前自动对齐采样率/声道/长度（Seed-VC 22k 单声道 vs demucs 44k 立体声）
+- 清掉外部环境里的 `HF_HUB_OFFLINE`（会让 Seed-VC 找不到已下载的模型）
+
+### 新增（免费造声音：小米 MiMo）
+- 「造声音 → 描述生成」新增「生成方式」：**小米 MiMo（当前免费）** / 百炼 CosyVoice（付费）
+- MiMo 走文字造音色，一句描述直接生成，不需要任何素材，音色记录 `design_prompt` 供后续合成复用
+
+### 实测（本机 RTX 3050 / CPU 推理）
+- 造声音：MiMo 描述 → 试听音频 → 用该音色合成，全链路通过
+- 翻唱：29 秒示例曲，demucs 分离 19s + Seed-VC 15 步约 6 分钟 + 对齐混音 → 成品 wav
+
 ## [1.3.2] - 2026-11-02
 
 ### 新增（造声音支持免费引擎）

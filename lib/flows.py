@@ -309,44 +309,63 @@ def universal_clone(provider_id: str, text: str, style: str = "",
 
 
 def _kits_voice(voice_name: str) -> dict:
+    return _voice_for_engine(voice_name, "kits")
+
+
+def _voice_for_engine(voice_name: str, engine: str) -> dict:
+    """取指定引擎可用的音色（kits=云端付费 / local-svc=本地免费）。"""
     voice = library.get_voice(voice_name)
     if not voice:
         raise ProviderError(f"音色「{library.sanitize_name(voice_name)}」未登记")
-    if voice.get("provider") != "kits":
+    want = "local-svc" if engine == "local-svc" else "kits"
+    if voice.get("provider") != want:
+        label = "本地 Seed-VC" if want == "local-svc" else "Kits.AI"
         raise ProviderError(
-            f"唱歌换声需要 Kits.AI 音色（网页端多素材训练的模型）；"
-            f"「{voice['name']}」是 {voice.get('provider')} 音色"
+            f"{label} 音色才能用于这个引擎；「{voice['name']}」是 {voice.get('provider')} 音色"
         )
     return voice
 
 
 def convert_vocal(audio_path: str, voice_name: str, strength: float = 0.8,
-                  pitch_shift: int = 0) -> dict:
-    """把一段干声（人声）换成 Kits.AI 音色模型的声音。"""
-    voice = _kits_voice(voice_name)
+                  pitch_shift: int = 0, engine: str = "kits") -> dict:
+    """把一段干声（人声）换成指定音色的声音：Kits.AI 云端，或本地 Seed-VC（免费）。"""
+    voice = _voice_for_engine(voice_name, engine)
     src = Path(audio_path or "")
     if not src.is_file():
         raise ProviderError(f"音频文件不存在: {src}")
     if src.suffix.lower() not in {".wav", ".mp3", ".flac"}:
         raise ProviderError("换声输入支持 wav/mp3/flac")
-    kits = get_provider("kits")
-    cfg = config.provider_config("kits")
-    result = kits.convert(
-        src.read_bytes(), src.name, voice["voice_id"], cfg,
-        strength=strength, pitch_shift=pitch_shift,
-    )
-    ext = _url_ext(result["url"], "wav")
+    if engine == "local-svc":
+        provider = get_provider("local-svc")
+        cfg = config.provider_config("local-svc")
+        result = provider.convert(
+            src.read_bytes(), src.name, voice["voice_id"], cfg,
+            strength=strength, pitch_shift=pitch_shift,
+        )
+        ext = "wav"
+    else:
+        provider = get_provider("kits")
+        cfg = config.provider_config("kits")
+        result = provider.convert(
+            src.read_bytes(), src.name, voice["voice_id"], cfg,
+            strength=strength, pitch_shift=pitch_shift,
+        )
+        ext = _url_ext(result["url"], "wav")
     path = library.save_output(f"{voice['name']}_换声", ext, result["audio"])
     return {"voice": voice["name"], "path": str(path), "size": len(result["audio"])}
 
 
 def sing_cover(song_path: str, voice_name: str, strength: float = 0.8,
-               pitch_shift: int = 0) -> dict:
+               pitch_shift: int = 0, engine: str = "kits") -> dict:
     """稳定翻唱流水线：歌曲 → 人声/伴奏分离 → 人声换声 → 混回伴奏 → 成品。
 
     「换声只对干声做」是稳定度的关键：伴奏全程不动，最后才拼回去。
+    engine=local-svc 时走本地 demucs + Seed-VC，全程免费（慢一些）。
     """
     from lib import audiomix
+
+    if engine == "local-svc":
+        return _sing_cover_local(song_path, voice_name, strength, pitch_shift)
 
     voice = _kits_voice(voice_name)
     song = Path(song_path or "")
@@ -391,6 +410,43 @@ def sing_cover(song_path: str, voice_name: str, strength: float = 0.8,
         "converted": str(converted_path),
         "final": final_path,
         "mix_method": mix_method,
+    }
+
+
+def _sing_cover_local(song_path: str, voice_name: str, strength: float = 0.8,
+                      pitch_shift: int = 0) -> dict:
+    """本地免费翻唱：demucs 分离 → Seed-VC 换声 → 混回伴奏。"""
+    from lib import audiomix
+
+    voice = _voice_for_engine(voice_name, "local-svc")
+    song = Path(song_path or "")
+    if not song.is_file():
+        raise ProviderError(f"歌曲文件不存在: {song}")
+    provider = get_provider("local-svc")
+    cfg = config.provider_config("local-svc")
+    # 1. 分离（本地 demucs）
+    sep = provider.separate(song.read_bytes(), song.name, cfg)
+    vocal_path = library.save_output(f"{voice['name']}_原曲人声", "wav", sep["vocal"])
+    backing_path = library.save_output(f"{voice['name']}_原曲伴奏", "wav", sep["backing"])
+    # 2. 换声（Seed-VC，参考音频来自音色的 voice_id）
+    conv = provider.convert(
+        vocal_path.read_bytes(), vocal_path.name, voice["voice_id"], cfg,
+        strength=strength, pitch_shift=pitch_shift,
+    )
+    converted_path = library.save_output(f"{voice['name']}_换声干声", "wav", conv["audio"])
+    # 3. 对齐到伴奏（采样率/声道/长度），再混回伴奏
+    aligned_path = converted_path.with_name(converted_path.stem + "_aligned.wav")
+    provider.align(converted_path, backing_path, aligned_path, cfg)
+    out = library.save_output(f"{voice['name']}_翻唱成品", "wav", b"")
+    mix = audiomix.mix_audio(aligned_path, backing_path, out)
+    return {
+        "voice": voice["name"],
+        "song": song.name,
+        "vocal": str(vocal_path),
+        "backing": str(backing_path),
+        "converted": str(converted_path),
+        "final": mix["output"],
+        "mix_method": mix["method"],
     }
 
 

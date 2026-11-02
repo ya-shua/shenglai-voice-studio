@@ -859,26 +859,36 @@ async function runHallPreview(btn) {
 
 async function loadCover() {
   const box = $("#cover-check");
+  const engine = ($("#sc-engine") || {}).value || "local-svc";
   const st = state.status || await api("/api/status").catch(() => null);
   if (!st) { box.textContent = "状态获取失败"; return; }
-  const kits = (st.providers || []).find((p) => p.id === "kits");
-  const kitVoices = state.voices.filter((v) => v.provider === "kits" && v.status !== "failed");
-    const lines = [
-      kits && kits.configured
-        ? "✅ Kits.AI 已配置"
-        : `❌ 未配置 Kits.AI Key（需订阅） <button class="mini" data-kits-setup="1">立即接入</button>`,
-      st.ffmpeg
-        ? "✅ ffmpeg 已安装（任意格式自动混音）"
-        : "⚠ 未装 ffmpeg：wav 可直混；mp3 伴奏需安装 ffmpeg",
-      kitVoices.length
-        ? `✅ 歌手音色 ${kitVoices.length} 个`
-        : `⚠ 没有歌手音色：在 kits.ai 用多段唱歌素材训练后，点 <button class="mini" data-kits-voice="1">登记歌手音色</button>`,
-    ];
-    box.innerHTML = lines.join("<br>");
-  $("#cover-form").classList.toggle("hidden", !(kits && kits.configured));
+  const prov = (st.providers || []).find((p) => p.id === engine);
+  const voices = state.voices.filter((v) => v.provider === engine && v.status !== "failed");
+  const lines = [];
+  if (engine === "local-svc") {
+    lines.push(prov && prov.configured
+      ? "✅ 本地 Seed-VC 已就绪（demucs 分离 + Seed-VC 换声，全程免费）"
+      : `❌ 还没配置本地 Seed-VC 目录 <button class="mini" data-local-setup="1">去设置</button>`);
+    lines.push("ℹ 本机 CPU 跑：整曲约 3~10 分钟，步数低更快");
+    lines.push(voices.length
+      ? `✅ 本地参考音色 ${voices.length} 个`
+      : `⚠ 没有本地参考音色：造声音 → 登记已有 → 来源选「本地 Seed-VC」，voice_id 填参考音频路径（10~30 秒干声）`);
+  } else {
+    lines.push(prov && prov.configured
+      ? "✅ Kits.AI 已配置"
+      : `❌ 未配置 Kits.AI Key（需订阅） <button class="mini" data-kits-setup="1">立即接入</button>`);
+    lines.push(st.ffmpeg
+      ? "✅ ffmpeg 已安装（任意格式自动混音）"
+      : "⚠ 未装 ffmpeg：wav 可直混；mp3 伴奏需安装 ffmpeg");
+    lines.push(voices.length
+      ? `✅ 歌手音色 ${voices.length} 个`
+      : `⚠ 没有歌手音色：在 kits.ai 用多段唱歌素材训练后，点 <button class="mini" data-kits-voice="1">登记歌手音色</button>`);
+  }
+  box.innerHTML = lines.join("<br>");
+  $("#cover-form").classList.toggle("hidden", !(prov && prov.configured));
   const sel = $("#sc-voice");
-  sel.innerHTML = kitVoices.map((v) => `<option value="${esc(v.name)}">${esc(v.name)}</option>`).join("")
-    || `<option value="">（无歌手音色）</option>`;
+  sel.innerHTML = voices.map((v) => `<option value="${esc(v.name)}">${esc(v.name)}</option>`).join("")
+    || `<option value="">（无可用音色）</option>`;
 }
 
 function renderCoverVoices() { loadCover(); }
@@ -890,16 +900,20 @@ async function runSing() {
   const voice = $("#sc-voice").value;
   if (!voice) return toast("没有歌手音色：按上方清单先登记", false);
   const mode = $("#sc-mode").value;
+  const engine = ($("#sc-engine") || {}).value || "local-svc";
   const params = new URLSearchParams({
     voice_name: voice,
     strength: $("#sc-strength").value || "0.8",
     pitch_shift: $("#sc-pitch").value || "0",
+    engine: engine,
   });
   busy(btn, true, "处理中…");
   const prog = $("#sc-progress");
   const start = Date.now();
+  const localNote = engine === "local-svc" ? "本地处理中" : "云端处理中";
+  const estNote = engine === "local-svc" ? "通常 3~10 分钟（CPU）" : "通常 1~5 分钟";
   const timer = setInterval(() => {
-    prog.textContent = `云端处理中… 已 ${Math.round((Date.now() - start) / 1000)} 秒（分离 → 换声 → 混音，通常 1~5 分钟）`;
+    prog.textContent = `${localNote}… 已 ${Math.round((Date.now() - start) / 1000)} 秒（分离 → 换声 → 混音，${estNote}）`;
   }, 1000);
   const box = $("#sc-result");
   box.className = "result"; box.classList.remove("hidden");
@@ -1218,7 +1232,9 @@ function wire() {
   // 翻唱
   on("#sc-run", "click", runSing);
   on("#sc-reload", "click", loadCover);
+  on("#sc-engine", "change", loadCover);
   on("#cover-check", "click", (e) => {
+    if (e.target.closest("[data-local-setup]")) switchTask("settings");
     if (e.target.closest("[data-kits-setup]")) ensureProvider("kits", loadCover);
     if (e.target.closest("[data-kits-voice]")) {
       switchTask("create");
