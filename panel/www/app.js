@@ -1200,6 +1200,15 @@ function wire() {
   $$("#side-nav button, .side-foot button").forEach((b) =>
     b.addEventListener("click", () => switchTask(b.dataset.task)));
   // 顶栏
+  on("#btn-quit", "click", async () => {
+    if (!confirm("关闭声来面板？\n关闭后要重新双击桌面「声来」才能再打开。")) return;
+    try { await fetch("/api/shutdown", { method: "POST" }); } catch (err) {}
+    document.body.innerHTML =
+      '<div style="display:flex;height:100vh;align-items:center;justify-content:center;flex-direction:column;gap:14px;' +
+      'font:15px system-ui;color:#6b7280;background:#fff">' +
+      '<div style="font-size:44px">🎙️</div><div style="font-size:18px;color:#111827">声来面板已关闭</div>' +
+      '<div style="font-size:13px">可以关掉这个标签页了；下次双击桌面「声来」重新启动</div></div>';
+  });
   on("#cur-voice", "change", (e) => {
     state.current = e.target.value;
     try { localStorage.setItem("shenglai.voice", state.current); } catch (err) {}

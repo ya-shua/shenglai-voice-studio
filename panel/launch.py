@@ -1,10 +1,13 @@
-"""声来独立启动器：配合「声来面板.bat」双击启动，无需打开 ZCode。
+"""声来启动器：双击桌面「声来」即可，不需要任何命令行窗口。
 
 行为：
-- 面板已在运行（健康检查通过）→ 直接打开浏览器
-- 未运行 → 启动面板服务 → 等待就绪 → 打开浏览器，前台运行（关闭本窗口即停止面板）
+- 面板已在运行（健康检查通过）→ 直接打开浏览器，自己退出
+- 未运行 → 用 pythonw 在后台启动面板服务（**无控制台窗口**）→ 等就绪 → 打开浏览器 → 自己退出
+- 想停掉面板：点页面右上角的「⏻ 关闭」，或再运行一次本文件加 --stop
 
-用法：python panel/launch.py [--no-browser]
+日志写在数据目录的 panel.log（出问题时看这个）。
+
+用法：pythonw panel/launch.py [--no-browser|--stop]
 """
 from __future__ import annotations
 
@@ -19,6 +22,8 @@ from pathlib import Path
 
 PLUGIN_ROOT = Path(__file__).resolve().parents[1]
 PREFERRED_PORT = 17878
+DETACHED_PROCESS = 0x00000008
+CREATE_NEW_PROCESS_GROUP = 0x00000200
 
 
 def _data_root() -> Path:
@@ -34,9 +39,9 @@ def _data_root() -> Path:
     return Path.home() / ".voice-studio"
 
 
-def _healthy(port: int) -> bool:
+def _healthy(port: int, timeout: float = 0.6) -> bool:
     try:
-        with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/status", timeout=1.5) as r:
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/status", timeout=timeout) as r:
             return r.status == 200
     except OSError:
         return False
@@ -51,41 +56,77 @@ def _meta_port() -> int:
         return 0
 
 
+def _running_port() -> int:
+    for port in (_meta_port(), PREFERRED_PORT):
+        if port and _healthy(port):
+            return port
+    return 0
+
+
+def _pythonw() -> str:
+    exe = Path(sys.executable)
+    cand = exe.with_name("pythonw.exe")
+    return str(cand if cand.is_file() else exe)
+
+
+def _log_path() -> Path:
+    root = _data_root()
+    root.mkdir(parents=True, exist_ok=True)
+    return root / "panel.log"
+
+
 def main() -> None:
     no_browser = "--no-browser" in sys.argv
-    try:
-        sys.stdout.reconfigure(encoding="utf-8")
-    except Exception:
-        pass
 
-    # 1) 已在运行：直接用
-    if _healthy(PREFERRED_PORT):
-        print(f"声来面板已在运行: http://127.0.0.1:{PREFERRED_PORT}")
-        if not no_browser:
-            webbrowser.open(f"http://127.0.0.1:{PREFERRED_PORT}/")
+    if "--stop" in sys.argv:
+        port = _running_port()
+        if not port:
+            print("面板没有在运行")
+            return
+        req = urllib.request.Request(f"http://127.0.0.1:{port}/api/shutdown", method="POST")
+        try:
+            urllib.request.urlopen(req, timeout=3).read()
+            print("已通知面板关闭")
+        except OSError:
+            print("关闭请求失败（可能已经退出）")
         return
 
-    # 2) 启动面板（前台运行，关闭窗口即停止）
-    print("正在启动声来面板…")
-    proc = subprocess.Popen(
-        [sys.executable, "-u", str(PLUGIN_ROOT / "panel" / "server.py"), "--port", str(PREFERRED_PORT)]
-    )
-    port = 0
-    for _ in range(60):  # 最多等 12 秒
-        port = _meta_port() or (PREFERRED_PORT if _healthy(PREFERRED_PORT) else 0)
-        if port and _healthy(port):
-            break
-        time.sleep(0.2)
-    if port and _healthy(port):
-        print(f"✅ 声来面板已启动: http://127.0.0.1:{port}（关闭本窗口即停止面板）")
+    # 1) 已在运行：直接开浏览器
+    port = _running_port()
+    if port:
         if not no_browser:
             webbrowser.open(f"http://127.0.0.1:{port}/")
-    else:
-        print("启动失败，请把上方错误信息发给 AI 助手排查")
+        return
+
+    # 2) 后台启动（无窗口），然后开浏览器
+    log = open(_log_path(), "ab")
     try:
-        proc.wait()
-    except KeyboardInterrupt:
-        proc.terminate()
+        subprocess.Popen(
+            [str(_pythonw()), "-u", str(PLUGIN_ROOT / "panel" / "server.py"),
+             "--port", str(PREFERRED_PORT)],
+            cwd=str(PLUGIN_ROOT),
+            stdin=subprocess.DEVNULL,
+            stdout=log,
+            stderr=log,
+            creationflags=DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP,
+            close_fds=True,
+        )
+    finally:
+        log.close()
+
+    ready = 0
+    for _ in range(120):  # 最多等 24 秒
+        port = _meta_port() or PREFERRED_PORT
+        if _healthy(port):
+            ready = port
+            break
+        time.sleep(0.2)
+
+    if ready:
+        if not no_browser:
+            webbrowser.open(f"http://127.0.0.1:{ready}/")
+    else:
+        print(f"启动失败，详见 {_log_path()}", file=sys.stderr)
 
 
 if __name__ == "__main__":

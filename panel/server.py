@@ -7,8 +7,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shutil
 import sys
+import threading
 import time
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -202,6 +204,11 @@ class Handler(BaseHTTPRequestHandler):
         route = parsed.path
         q = urllib.parse.parse_qs(parsed.query)
         try:
+            if route == "/api/shutdown":
+                self._json({"ok": True, "message": "面板已关闭"})
+                # 先把响应发出去，再退出进程
+                threading.Timer(0.4, lambda: os._exit(0)).start()
+                return
             if route == "/api/config":
                 body = self._body_json()
                 pid = str(body.get("provider") or "")

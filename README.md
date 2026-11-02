@@ -35,7 +35,7 @@
 
 ## 快速开始
 
-0. **独立启动（推荐）**：双击数据目录下的 `声来面板.bat`（或桌面「声来」快捷方式）——自动起面板并打开浏览器，无需打开 ZCode；已在运行则直接开浏览器；关闭启动器窗口即停止面板
+0. **独立启动（推荐）**：双击桌面「声来」快捷方式 —— **无窗口**在后台起面板并自动打开浏览器，无需打开 ZCode；已在运行则只再开一个标签页；**要关闭就点页面右上角「⏻ 关闭」**（或以 `python panel/launch.py --stop` 关闭）
 1. **安装**：ZCode → Plugin Marketplace → Add → 粘贴插件市场目录 → 安装「声来」
 2. **接入模型**：面板「设置 → 模型接入」选小米 MiMo（[platform.xiaomimimo.com](https://platform.xiaomimimo.com) 取 Key，TTS 限时免费）；或首次使用时按弹窗引导接入
 3. **造第一个声音**：✨ 造声音 → 「描述生成」→ 生成方式选 **小米 MiMo（免费）** → 一句描述 → 生成并试听
@@ -96,6 +96,27 @@ pip install demucs
 - **唱歌素材**：模型生成的素材是"说话"，翻唱歌手音色需真人清唱素材（≥10 分钟干净干声最稳），在 kits.ai 训练
 - **混音**：未装 ffmpeg 时 wav 可直混；mp3 伴奏建议安装 ffmpeg
 - **翻唱稳定性**：伴奏全程不动只换人声；音域不合调 pitch_shift（男转女 +4~+7 半音试起）
+- **怎么关掉面板**：页面右上角「⏻ 关闭」；或 `python panel/launch.py --stop`；启动出错看数据目录的 `panel.log`
+- **改完前端没生效**：版本号改了面板会自动提示刷新，或按 `Ctrl+F5` 强制清缓存
+
+## 更新与发布（GitHub）
+
+| 项 | 值 |
+|---|---|
+| 仓库 | https://github.com/ya-shua/shenglai-voice-studio （Public · MIT · `main`） |
+| 下载 | [main.zip](https://github.com/ya-shua/shenglai-voice-studio/archive/refs/heads/main.zip) |
+| 本地仓库 | 就在插件目录 `D:\AI\插件\plugins\voice-studio` |
+
+发版三件事：
+
+1. **版本号三处同步**：`lib/config.py` 的 `VERSION`、`.zcode-plugin/plugin.json` 的 `version`、市场清单 `marketplace.json` 的 `version`
+2. **写 CHANGELOG**：`docs/CHANGELOG.md` 顶部加一条
+3. **提交并推送**：`git add -A && git commit` → 推 `main`（HTTPS + PAT）
+
+> 仓库带 **仅本仓库生效** 的 pre-push 隐私门禁：拦截 `sk-…`、`ghp_…`、邮箱、手机号等硬编码密钥与隐私，本机绝对路径只警告。
+> `git push` 连不上 github.com 时（hosts 里 IP 失效是常见原因），改用 GitHub API 创建 commit 推送，已写好脚本示例。
+
+完整操作（含 PAT 用法、API 推送脚本、发版检查清单）见 [docs/RELEASING.md](docs/RELEASING.md)。
 
 ---
 
