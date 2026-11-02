@@ -7,6 +7,13 @@
 
 ---
 
+## [1.3.1] - 2026-11-02
+
+### 修复（顶部导航点了页面不切换）
+- 根因：`switchTask` 只切换 `.active` class，但各面板页的显示完全靠 HTML 上的 `hidden` 属性（CSS 里没有任何 `.task` 显示规则）——所以 class 变了、标题变了，内容区纹丝不动
+- 修复：`switchTask` 同步设置 `hidden`（class 与 hidden 双保险）；CSS 补上 `.task { display: none }` / `.task.active { display: block }` 兜底
+- 影响范围：音色大厅 / 说话 / 造声音 / 我的音色 / 翻唱 / 模型接入 / 使用指南 七个页面全部受影响
+
 ## [1.3.0] - 2026-11-02
 
 ### 改动（音色大厅）

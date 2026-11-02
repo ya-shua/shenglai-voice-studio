@@ -237,7 +237,12 @@ const PAGE_TITLES = {
 
 function switchTask(name) {
   $$("#side-nav button, .side-foot button").forEach((b) => b.classList.toggle("active", b.dataset.task === name));
-  $$(".task").forEach((t) => t.classList.toggle("active", t.id === "task-" + name));
+  // class 与 hidden 双保险：面板页初始靠 hidden 属性隐藏，只切 class 会导致页面不切换
+  $$(".task").forEach((t) => {
+    const on = t.id === "task-" + name;
+    t.classList.toggle("active", on);
+    t.hidden = !on;
+  });
   const title = $("#page-title");
   if (title) title.textContent = PAGE_TITLES[name] || "声来";
   if (name === "hall") loadHall();

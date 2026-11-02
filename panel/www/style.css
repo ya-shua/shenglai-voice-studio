@@ -210,6 +210,9 @@ button:disabled { opacity: .55; cursor: wait; }
 }
 .toast.err { border-color: var(--err); }
 @keyframes toastIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+/* 面板页切换：默认隐藏，仅当前页显示（与 JS 的 hidden 同步，双保险） */
+.task { display: none; }
+.task.active { display: block; }
 .task.active { animation: taskIn .18s ease; }
 @keyframes taskIn { from { opacity: .4; } to { opacity: 1; } }
 
