@@ -78,3 +78,7 @@
 ---
 
 版本历史见 [docs/CHANGELOG.md](docs/CHANGELOG.md) ｜ 素材采集指南见 [docs/素材采集指南.md](docs/素材采集指南.md)
+
+## 许可证
+
+[MIT License](LICENSE) © 2026 ya-shua

@@ -5,6 +5,7 @@
   "author": {
     "name": "ya-shua"
   },
+  "license": "MIT",
   "mcpServers": {
     "voice-studio": {
       "command": "python",
