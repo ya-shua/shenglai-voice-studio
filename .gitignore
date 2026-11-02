@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# 系统
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 运行时数据与密钥：正常在数据根目录（不在本仓库），这里挡住误放
+config.json
+.panel.json
+voices.json
+outputs/
+materials/
+*.log
