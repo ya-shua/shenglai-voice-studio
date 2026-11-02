@@ -42,15 +42,18 @@
     <p class="pageintro">各模型的官方免费音色，挑一个选中、输入文字直接试听——<b>微软 Edge 与小米 MiMo 完全免费</b>，喜欢的点「用她说话」录进音色库。</p>
     <div class="row">
       <label>模型<select id="hall-model"></select></label>
-      <label>分类<select id="hall-cat"><option value="">全部分类</option></select></label>
+      <label>性别<select id="hall-gender"><option value="">全部性别</option><option value="女声">女声</option><option value="男声">男声</option></select></label>
       <label>搜索<input id="hall-q" placeholder="搜名字 / 标签，如：温柔"></label>
     </div>
     <p class="hint" id="hall-model-hint" hidden></p>
-    <div id="hall-preview" class="previewbar" hidden>
+    <div id="hall-preview" class="previewbar">
       <span class="avatar" id="hall-sel-avatar" style="width:34px;height:34px;font-size:15px">?</span>
-      <div class="pv-name"><b id="hall-sel-name">未选择</b><div class="dim" id="hall-sel-src"></div></div>
-      <input id="hall-text" value="你好，很高兴认识你，希望我的声音能陪你度过愉快的一天。" placeholder="输入试听文字（≤100字）">
+      <div class="pv-name"><b id="hall-sel-name">未选择</b><div class="dim" id="hall-sel-src">点下方卡片选中一个音色</div></div>
+      <label class="inline-field">风格<select id="hall-style"><option value="">全部风格</option></select></label>
       <button id="hall-run" class="primary" type="button">▶ 试听</button>
+    </div>
+    <div class="hall-textrow">
+      <input id="hall-text" value="你好，很高兴认识你，希望我的声音能陪你度过愉快的一天。" placeholder="输入试听文字（≤100字）">
     </div>
     <div id="hall-grid" class="voicegrid"></div>
     <audio id="hall-player" controls class="player hidden"></audio>

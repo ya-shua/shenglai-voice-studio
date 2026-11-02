@@ -123,9 +123,18 @@ button:disabled { opacity: .55; cursor: wait; }
 .previewbar {
   display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
   background: var(--panel2); border: 1px solid var(--accent);
-  border-radius: 12px; padding: 12px 14px; margin: 12px 0 16px;
+  border-radius: 12px; padding: 12px 14px; margin: 12px 0 10px;
 }
 .previewbar input { flex: 1 1 240px; margin: 0; }
+/* 风格筛选：占用原试听输入框的位置 */
+.previewbar .inline-field {
+  display: flex; align-items: center; gap: 8px; margin: 0;
+  flex: 0 0 auto; font-size: 12px; color: var(--muted); white-space: nowrap;
+}
+.previewbar .inline-field select { width: auto; min-width: 130px; margin: 0; }
+/* 试听文字输入：已从「当前音色」条独立出来，单独占一行 */
+.hall-textrow { margin: 0 0 16px; }
+.hall-textrow input { width: 100%; margin: 0; }
 .pv-name { min-width: 120px; }
 .pv-name b { font-size: 14px; }
 .voicegrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(215px, 1fr)); gap: 14px; }

@@ -12,6 +12,26 @@ function sortCats(cats) {
   });
 }
 
+const GENDER_TAGS = ["女声", "男声"];
+const LANG_TAGS = ["普通话", "粤语", "台湾腔", "方言", "双语", "多语", "英文", "日语", "韩语"];
+
+/* 风格标签 = 剔除性别与语言之后的标签（温柔型 / 活力型 / 沉稳型 / 播报…） */
+function styleTagsOf(list) {
+  return sortCats([...new Set(list.flatMap((v) => v.tags || []))]
+    .filter((t) => !GENDER_TAGS.includes(t) && !LANG_TAGS.includes(t)));
+}
+
+/* 重建「风格」下拉：只列当前模型下真正出现过的风格标签 */
+function fillHallStyle(list) {
+  const sel = $("#hall-style");
+  if (!sel) return;
+  const cur = sel.value;
+  const tags = styleTagsOf(list);
+  sel.innerHTML = `<option value="">全部风格</option>` +
+    tags.map((c) => `<option>${esc(c)}</option>`).join("");
+  if (cur && tags.includes(cur)) sel.value = cur;
+}
+
 // 真实版本由 server.py 注入（window.__APP_VERSION__），不再手写——手写会与后端版本永远不等，
 // 导致「面板已更新」横幅常驻、点刷新也不消失。
 const CLIENT_VERSION = String(window.__APP_VERSION__ || "").trim();
@@ -652,8 +672,7 @@ async function loadHall() {
       `<option value="${esc(pid)}">${esc(nameOf(pid))}${hallProviderMap[pid] ? " · 已接入" : " · 未接入"}</option>`).join("");
     hallModel = order.find((pid) => hallProviderMap[pid]) || order[0] || "";
     if (hallModel) $("#hall-model").value = hallModel;
-    const cats = sortCats([...new Set(hallAll.filter((v) => !hallModel || v.provider === hallModel).flatMap((v) => v.tags || []))]);
-    $("#hall-cat").innerHTML = `<option value="">全部分类</option>` + cats.map((c) => `<option>${esc(c)}</option>`).join("");
+    fillHallStyle(hallAll.filter((v) => !hallModel || v.provider === hallModel));
     updateHallHint();
     renderHall();
   } catch (e) {
@@ -663,10 +682,12 @@ async function loadHall() {
 
 function renderHall() {
   const q = $("#hall-q").value.trim().toLowerCase();
-  const cat = $("#hall-cat").value;
+  const gender = $("#hall-gender").value;
+  const style = $("#hall-style").value;
   const list = hallAll.filter((v) => {
     if (hallModel && v.provider !== hallModel) return false;
-    if (cat && !(v.tags || []).includes(cat)) return false;
+    if (gender && !(v.tags || []).includes(gender)) return false;
+    if (style && !(v.tags || []).includes(style)) return false;
     if (q) {
       const hay = (v.name + " " + (v.tags || []).join(" ") + " " + v.provider_name).toLowerCase();
       if (!hay.includes(q.toLowerCase())) return false;
@@ -742,16 +763,23 @@ function updateHallHint() {
 async function onHallModelChange() {
   hallModel = $("#hall-model").value;
   hallSelected = null;
-  $("#hall-preview").hidden = true;
-  const cats = sortCats([...new Set(hallAll.filter((v) => v.provider === hallModel).flatMap((v) => v.tags || []))]);
-  $("#hall-cat").innerHTML = `<option value="">全部分类</option>` + cats.map((c) => `<option>${esc(c)}</option>`).join("");
+  resetHallSelection();
+  fillHallStyle(hallAll.filter((v) => v.provider === hallModel));
   updateHallHint();
   renderHall();
 }
 
+/* 清空「当前选中」的展示（切换模型 / 重置时用；风格条常驻，不再整体隐藏） */
+function resetHallSelection() {
+  const name = $("#hall-sel-name"), src = $("#hall-sel-src"), av = $("#hall-sel-avatar");
+  if (name) name.textContent = "未选择";
+  if (src) src.textContent = "点下方卡片选中一个音色";
+  if (av) { av.style.background = ""; av.textContent = "?"; }
+  document.querySelectorAll("#hall-grid .voicecard").forEach((c) => c.classList.remove("hall-selected"));
+}
+
 function selectHallVoice(info) {
   hallSelected = info;
-  $("#hall-preview").hidden = false;
   $("#hall-sel-name").textContent = info.name;
   $("#hall-sel-src").textContent = info.provider_name || "";
   const hue = hueOf(info.voice_id);
@@ -1162,7 +1190,8 @@ function wire() {
   // 大厅
   on("#hall-model", "change", onHallModelChange);
   on("#hall-q", "input", renderHall);
-  on("#hall-cat", "change", renderHall);
+  on("#hall-gender", "change", renderHall);
+  on("#hall-style", "change", renderHall);
   // 我的：素材
   on("#gm-auto", "click", runAutoFill);
   on("#gm-run", "click", runGenerateOne);

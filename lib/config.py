@@ -14,7 +14,7 @@ import os
 from pathlib import Path
 
 APP_NAME = "voice-studio"
-VERSION = "1.2.9"
+VERSION = "1.3.0"
 
 _DEFAULT_CONFIG = {
     "version": 1,
