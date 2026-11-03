@@ -84,3 +84,24 @@ def official_demo(provider_id: str, voice_id: str):
     if not hit:
         return None
     return hit["url"], hit.get("name", vid)
+
+
+# 阿里文档页里混进来的情绪标签行（非音色，清洗用）
+_NOISE_KEYS = {"sad", "happy", "neutral", "surprised", "angry", "fearful",
+               "disgusted", "calm", "gentle", "serious"}
+
+
+def ali_voices_full() -> list:
+    """阿里官方文档页解析出的全部预置音色（清洗情绪噪音行）。
+
+    返回 [{voice_id, name, url}]——每项都带官方试听 mp3（免费无需 Key）。
+    """
+    mapping = _load_mapping()
+    out = []
+    for k, v in mapping.items():
+        if k.lower() in _NOISE_KEYS:
+            continue
+        if not (v.get("url") or "").startswith("http"):
+            continue
+        out.append({"voice_id": k, "name": v.get("name", k), "url": v["url"]})
+    return out

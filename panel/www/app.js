@@ -231,7 +231,7 @@ async function loadStatus() {
 }
 
 const PAGE_TITLES = {
-  hall: "音色大厅", speak: "说话", create: "造声音",
+  hall: "免费音色", speak: "说话", create: "造声音",
   mine: "我的音色", cover: "翻唱", settings: "模型接入", guide: "使用指南",
 };
 
@@ -245,7 +245,7 @@ function switchTask(name) {
   });
   const title = $("#page-title");
   if (title) title.textContent = PAGE_TITLES[name] || "声来";
-  if (name === "hall") loadHall();
+  if (name === "hall") loadHall().then(() => warmCurrent());
   if (name === "speak") loadOutputs();
   if (name === "create") { renderVoices(); loadCloneModels(); }
   if (name === "mine") { renderVoices(); showMaterials(); loadMaterialSourceVoices(); }
@@ -684,8 +684,12 @@ async function loadHall() {
     const modelIds = [...new Set(hallAll.map((v) => v.provider))];
     const order = modelIds.sort((a, b) => (hallProviderMap[b] ? 1 : 0) - (hallProviderMap[a] ? 1 : 0));
     const nameOf = (pid) => (hallAll.find((v) => v.provider === pid) || {}).provider_name || pid;
+    const tierOf = (pid) => {
+      const meta = provRes.providers.find((x) => x.id === pid);
+      return meta && meta.tier ? `【${meta.tier}】` : "";
+    };
     $("#hall-model").innerHTML = order.map((pid) =>
-      `<option value="${esc(pid)}">${esc(nameOf(pid))}${hallProviderMap[pid] ? " · 已接入" : " · 未接入"}</option>`).join("");
+      `<option value="${esc(pid)}">${tierOf(pid)}${esc(nameOf(pid))}${hallProviderMap[pid] ? " · 已接入" : " · 未接入"}</option>`).join("");
     hallModel = order.find((pid) => hallProviderMap[pid]) || order[0] || "";
     if (hallModel) $("#hall-model").value = hallModel;
     fillHallStyle(hallAll.filter((v) => !hallModel || v.provider === hallModel));
@@ -701,13 +705,15 @@ function renderHall() {
   const gender = $("#hall-gender").value;
   const style = $("#hall-style").value;
   const list = hallAll.filter((v) => {
-    if (hallModel && v.provider !== hallModel) return false;
-    if (gender && !(v.tags || []).includes(gender)) return false;
-    if (style && !(v.tags || []).includes(style)) return false;
+    // 有搜索词时跨全部模型搜索；否则按选中模型过滤
     if (q) {
       const hay = (v.name + " " + (v.tags || []).join(" ") + " " + v.provider_name).toLowerCase();
       if (!hay.includes(q.toLowerCase())) return false;
+    } else if (hallModel && v.provider !== hallModel) {
+      return false;
     }
+    if (gender && !(v.tags || []).includes(gender)) return false;
+    if (style && !(v.tags || []).includes(style)) return false;
     return true;
   });
   const grid = $("#hall-grid");
@@ -728,7 +734,7 @@ function renderHall() {
     <div class="voicecard${selCls}" data-hselect='${meta}'>
       <div class="vhead">
         <span class="avatar" style="background:hsl(${hue},55%,42%)">${esc(initial)}</span>
-        <div><b>${esc(v.name)}</b><div class="dim">${esc(v.provider_name)}</div></div>
+        <div><b>${esc(v.name)}</b><div class="dim">${esc(v.provider_name)}${v.official_demo ? " · 官方样音" : ""}</div></div>
       </div>
       <div>${(v.tags || []).map((t) => `<span class="obadge tts" style="margin:2px 4px 2px 0">${esc(t)}</span>`).join("")}${badge}</div>
       <div class="actions">
@@ -815,44 +821,49 @@ async function runHallPreview(btn) {
   const doOnce = async () => {
     const text = ($("#hall-text").value || "").trim().slice(0, 100);
     if (!text) return toast("请填试听文字", false);
-    busy(btn, true, "合成中…");
+    busy(btn, true, "…");
     try {
-      const res = await api("/api/preview", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          provider: hallSelected.provider,
-          voice_id: hallSelected.voice_id,
-          target_model: hallSelected.target_model || "",
-          text,
-        }),
-      });
+      const cache = await api("/api/preview-cache?provider=" + encodeURIComponent(hallSelected.provider) +
+        "&voice_id=" + encodeURIComponent(hallSelected.voice_id) +
+        "&text=" + encodeURIComponent(text));
+      let url;
+      if (cache.cached || cache.official_demo) {
+        url = cache.url;
+      } else {
+        const res = await api("/api/preview", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ provider: hallSelected.provider, voice_id: hallSelected.voice_id,
+            target_model: hallSelected.target_model || "", text }),
+        });
+        url = res.url;
+      }
       const p = $("#hall-player");
-      p.src = res.url + "&t=" + Date.now();
+      p.src = url + "&t=" + Date.now();
       p.classList.remove("hidden");
       p.play().catch(() => {});
     } catch (e) { throw e; }
     busy(btn, false);
   };
-  const doPreview = async () => {
+  const runWithRetry = async () => {
     try {
       await doOnce();
     } catch (e) {
-      // Edge 免费接口偶发 403/慢响应（DRM 窗口边界），自动重试一次
-      try {
-        await doOnce();
-      } catch (e2) { toast("试听失败: " + e2.message, false); busy(btn, false); }
+      try { await doOnce(); }
+      catch (e2) { toast("试听失败: " + e2.message, false); busy(btn, false); }
     }
   };
-  if (!hallProviderMap[hallSelected.provider]) {
-    if (hallSelected.free_preview) {
-      await doPreview();
-      toast("已播放官方样音；接入该模型后可自定义文字试听");
-      return;
-    }
-    ensureProvider(hallSelected.provider, doPreview);
+  // 有官方样音的音色（free_preview）无需接入即可试听；其余模型才弹接入引导
+  if (!hallProviderMap[hallSelected.provider] && !hallSelected.free_preview) {
+    ensureProvider(hallSelected.provider, runWithRetry);
     return;
   }
-  await doPreview();
+  await runWithRetry();
+}
+
+async function warmCurrent() {
+  try {
+    await fetch("/api/warm-previews?provider=" + encodeURIComponent(hallModel || ""), { method: "POST" });
+  } catch (e) { /* 预热失败不影响使用 */ }
 }
 
 /* ---------------- 🎵 翻唱 ---------------- */
@@ -1022,8 +1033,9 @@ async function renderProviderRows() {
     const btn = p.configured
       ? `<button class="mini" data-pedit="${esc(p.id)}">编辑</button>${del}`
       : `<button class="mini" data-pedit="${esc(p.id)}">接入</button>`;
+    const tierTag = p.tier ? `<span class="obadge conv">${esc(p.tier)}</span> ` : "";
     return `<div class="prow">
-      <div class="grow">${dot}<b>${esc(p.display_name)}</b>${tag}</div>
+      <div class="grow">${dot}<b>${esc(p.display_name)}</b>${tag} ${tierTag}</div>
       <div>${btn}</div>
     </div>`;
   }).join("");

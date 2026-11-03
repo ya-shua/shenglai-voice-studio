@@ -11,7 +11,7 @@
 <aside id="side">
   <div class="brand"><span class="blogo">🎙️</span><div><b>声来</b><span class="bsub">一句话，一个声音，一首歌</span></div></div>
   <nav id="side-nav">
-    <button data-task="hall" class="active" type="button">🎧 音色大厅</button>
+    <button data-task="hall" class="active" type="button">🎧 免费音色</button>
     <button data-task="speak" type="button">🗣️ 说话</button>
     <button data-task="create" type="button">✨ 造声音</button>
     <button data-task="mine" type="button">🗂️ 我的音色</button>
@@ -29,7 +29,7 @@
     <button class="mini" onclick="location.reload()" type="button">点击刷新启用</button>
   </div>
   <header class="topbar">
-    <h2 id="page-title">音色大厅</h2>
+    <h2 id="page-title">免费音色</h2>
     <div class="voicebar">
       <span id="cur-wrap" hidden><span class="vlabel">当前音色</span>
       <select id="cur-voice" aria-label="当前音色"></select></span>
@@ -51,7 +51,7 @@
       <span class="avatar" id="hall-sel-avatar" style="width:34px;height:34px;font-size:15px">?</span>
       <div class="pv-name"><b id="hall-sel-name">未选择</b><div class="dim" id="hall-sel-src">点下方卡片选中一个音色</div></div>
       <label class="inline-field">风格<select id="hall-style"><option value="">全部风格</option></select></label>
-      <button id="hall-run" class="primary" type="button">▶ 试听</button>
+      <button id="hall-run" class="playbtn" type="button" title="试听">▶</button>
     </div>
     <div class="hall-textrow">
       <input id="hall-text" value="你好，很高兴认识你，希望我的声音能陪你度过愉快的一天。" placeholder="输入试听文字（≤100字）">

@@ -29,6 +29,7 @@ from lib.providers.base import (
 class KitsAIProvider(Provider):
     id = "kits"
     display_name = "Kits.AI（唱歌换声）"
+    tier = "翻唱"
     capabilities = ("convert", "separate", "catalog")
     config_schema = (
         {

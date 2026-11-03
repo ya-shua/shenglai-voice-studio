@@ -60,6 +60,7 @@ PRESET_VOICES = [
 class BailianProvider(Provider):
     id = "bailian"
     display_name = "阿里云百炼 CosyVoice"
+    tier = "性价比"
     capabilities = ("enroll", "design", "tts", "query", "delete", "catalog")
     config_schema = (
         {
@@ -178,8 +179,20 @@ class BailianProvider(Provider):
         return True
 
     def catalog(self, cfg: dict) -> list:
-        """官方预置音色目录（静态，免克隆免 Key）。"""
-        return [dict(v) for v in PRESET_VOICES]
+        """官方音色目录：内置精选（带标签）+ 官方文档全量（均带试听样音）。"""
+        items = [dict(v) for v in PRESET_VOICES]
+        seen = {v["voice_id"] for v in items}
+        try:
+            from lib import preview_audio
+            for v in preview_audio.ali_voices_full():
+                if v["voice_id"] in seen:
+                    continue
+                items.append({"voice_id": v["voice_id"], "name": v["name"],
+                              "tags": ["百炼官方", "免费试听"], "target_model": "cosyvoice-v2"})
+                seen.add(v["voice_id"])
+        except Exception:
+            pass
+        return items
 
     # ---- 声音设计（文字描述直接生成音色，无需素材） ----
 

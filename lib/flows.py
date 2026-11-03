@@ -236,11 +236,18 @@ def hall_voices() -> list:
 
 
 def preview_voice(provider_id: str, voice_id: str, target_model: str = "", text: str = "") -> dict:
-    """大厅试听：已接入 → 自定义文字合成；未接入 → 回放官方样音（免费无需 Key）。"""
+    """大厅试听：缓存优先（同一音色+文字只合成一次）；
+    已接入 → 自定义文字合成；未接入 → 回放官方样音（免费无需 Key）。"""
     provider = get_provider(provider_id)
     if "tts" not in provider.capabilities:
         raise ProviderError(f"{provider.display_name} 不支持合成，无法试听")
     cfg = config.provider_config(provider_id)
+    from lib import preview_store
+    text = (text or "").strip() or preview_store.DEFAULT_PREVIEW_TEXT
+    cached = preview_store.get(provider_id, voice_id, text)
+    if cached:
+        return {"file": cached.name, "path": str(cached), "size": cached.stat().st_size,
+                "cached": True}
     configured = True
     try:
         provider.validate_config(cfg)
@@ -252,7 +259,7 @@ def preview_voice(provider_id: str, voice_id: str, target_model: str = "", text:
         if demo:
             from lib.providers.base import http_download
             data = http_download(demo[0], timeout=60)
-            path = library.save_output(f"样音_{provider_id}", "mp3", data)
+            path = preview_store.put(provider_id, voice_id, text, data, ext="mp3")
             return {"file": path.name, "path": str(path), "size": len(data),
                     "official_demo": True}
     data, ext = provider.tts(
@@ -262,7 +269,7 @@ def preview_voice(provider_id: str, voice_id: str, target_model: str = "", text:
         {},
         cfg,
     )
-    path = library.save_output(f"试听_{provider_id}", ext, data)
+    path = preview_store.put(provider_id, voice_id, text, data, ext=ext)
     return {"file": path.name, "path": str(path), "size": len(data)}
 
 
@@ -306,6 +313,34 @@ def universal_clone(provider_id: str, text: str, style: str = "",
         if tmp is not None:
             tmp.unlink(missing_ok=True)
     return {"mode": f"clone:{provider_id}", "provider_name": provider.display_name, **result}
+
+
+def warm_previews(provider_id: str, limit: int = 12) -> int:
+    """后台预热：为某模型的全部目录音色合成默认试听（已有缓存的跳过）。返回新合成数。"""
+    provider = get_provider(provider_id)
+    if "tts" not in provider.capabilities or "catalog" not in provider.capabilities:
+        return 0
+    cfg = config.provider_config(provider_id)
+    try:
+        provider.validate_config(cfg)
+    except ProviderError:
+        raise
+    from lib import preview_store
+    items = provider.catalog(cfg)[:limit]
+    n = 0
+    for it in items:
+        vid = it.get("voice_id")
+        if preview_store.has_default(provider_id, vid):
+            continue
+        try:
+            data, ext = provider.tts(
+                preview_store.DEFAULT_PREVIEW_TEXT, vid,
+                it.get("target_model", ""), {}, cfg)
+            preview_store.put(provider_id, vid, preview_store.DEFAULT_PREVIEW_TEXT, data, ext=ext)
+            n += 1
+        except Exception:
+            continue
+    return n
 
 
 def _kits_voice(voice_name: str) -> dict:

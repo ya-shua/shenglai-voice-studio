@@ -21,6 +21,7 @@ from lib.providers.base import (
 class ElevenLabsProvider(Provider):
     id = "elevenlabs"
     display_name = "ElevenLabs"
+    tier = "高性能"
     capabilities = ("enroll", "tts", "catalog")
     config_schema = (
         {

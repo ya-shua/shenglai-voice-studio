@@ -3,11 +3,11 @@ from __future__ import annotations
 
 from lib import config
 from lib.providers.base import GenericTTSProvider, Provider, ProviderError
-from lib.providers import bailian, elevenlabs, fish, kits, local_svc, mimo, siliconflow
+from lib.providers import bailian, elevenlabs, fish, kits, local_svc, minimax, mimo, siliconflow
 
 __all__ = ["get_provider", "list_providers", "Provider", "ProviderError"]
 
-_BUILTIN = ("bailian", "elevenlabs", "fish", "kits", "local-svc", "mimo", "siliconflow")
+_BUILTIN = ("bailian", "elevenlabs", "fish", "kits", "local-svc", "minimax", "mimo", "siliconflow")
 
 
 def get_provider(provider_id: str) -> Provider:
@@ -21,6 +21,8 @@ def get_provider(provider_id: str) -> Provider:
         return kits.KitsAIProvider()
     if provider_id == "local-svc":
         return local_svc.LocalSeedVCProvider()
+    if provider_id == "minimax":
+        return minimax.MiniMaxProvider()
     if provider_id == "mimo":
         return mimo.MiMoProvider()
     if provider_id == "siliconflow":
@@ -48,6 +50,7 @@ def list_providers() -> list[dict]:
             {
                 "id": p.id,
                 "display_name": p.display_name,
+                "tier": p.tier,
                 "capabilities": list(p.capabilities),
                 "configured": configured,
                 "config_schema": list(p.config_schema),
@@ -59,6 +62,7 @@ def list_providers() -> list[dict]:
             {
                 "id": p.id,
                 "display_name": p.display_name,
+                "tier": p.tier,
                 "capabilities": list(p.capabilities),
                 "configured": bool(str(definition.get("url", "")).strip()),
                 "config_schema": list(p.config_schema),

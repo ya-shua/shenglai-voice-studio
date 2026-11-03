@@ -116,6 +116,7 @@ class Provider:
 
     id = ""
     display_name = ""
+    tier = ""          # 档位标签：免费 / 性价比 / 高性能 / 翻唱（空 = 未分类）
     capabilities: tuple = ()
     # 配置字段描述: {key,label,required,secret,placeholder,help}
     config_schema: tuple = ()

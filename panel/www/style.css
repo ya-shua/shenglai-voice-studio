@@ -259,3 +259,19 @@ button:disabled { opacity: .55; cursor: wait; }
   background: rgba(79,140,255,.12); border: 1px solid var(--accent);
   border-radius: 10px; padding: 10px 16px; margin: 0 0 14px; font-size: 13px;
 }
+
+
+/* ===== 免费音色页打磨 ===== */
+.playbtn {
+  background: var(--accent); border: none; color: #fff;
+  width: 52px; height: 44px; border-radius: 10px;
+  font-size: 16px; cursor: pointer; flex: none; margin: 0;
+}
+.playbtn:hover { background: var(--accent2); transform: scale(1.04); }
+.previewbar { position: sticky; top: 12px; z-index: 5; box-shadow: 0 6px 20px rgba(0,0,0,.35); }
+#main .row select, #main .row input {
+  height: 38px; border-radius: 10px; padding: 0 12px; margin: 0;
+}
+#main .row label { margin: 0; }
+#hall-text { flex: 3 1 320px !important; }
+.hall-tag { color: var(--ok); }

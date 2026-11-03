@@ -172,6 +172,40 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({"voices": library.list_material_voices()})
             if route == "/api/hall":
                 return self._json({"ok": True, "voices": flows.hall_voices()})
+            if route == "/api/speak" or route == "/api/speak/voices":
+                return self._handle_speak(route, q)
+            if route == "/api/preview-cache":
+                from lib import preview_store
+                pid = (q.get("provider") or [""])[0]
+                vid = (q.get("voice_id") or [""])[0]
+                text = (q.get("text") or [""])[0]
+                hit = preview_store.get(pid, vid, text)
+                if hit:
+                    return self._json({"ok": True, "cached": True,
+                                       "url": "/api/preview-file?name=" + urllib.parse.quote(hit.name)})
+                # 官方样音兜底（bailian/siliconflow 未接入也可直接播）
+                from lib import preview_audio
+                demo = preview_audio.official_demo(pid, vid)
+                if demo:
+                    return self._json({"ok": True, "official_demo": True,
+                                       "url": demo[0]})
+                return self._json({"ok": True, "miss": True})
+            if route == "/api/preview-file":
+                name = urllib.parse.unquote((q.get("name") or [""])[0])
+                from lib import preview_store
+                p2 = (config.data_root() / "preview_cache" / name).resolve()
+                if not p2.is_relative_to((config.data_root() / "preview_cache").resolve()) or not p2.is_file():
+                    return self._json({"error": "文件不存在"}, 404)
+                data = p2.read_bytes()
+                ctype = {".mp3": "audio/mpeg", ".wav": "audio/wav"}.get(p2.suffix.lower(), "audio/mpeg")
+                self.send_response(200)
+                self.send_header("Content-Type", ctype)
+                self.send_header("Content-Length", str(len(data)))
+                self.send_header("Cache-Control", "no-store")
+                self.end_headers()
+                self.wfile.write(data)
+                return
+
             if route == "/api/catalog":
                 pid = (q.get("provider") or [""])[0]
                 if not pid:
@@ -198,6 +232,44 @@ class Handler(BaseHTTPRequestHandler):
             self._json({"error": str(e)}, 400)
         except Exception as e:  # noqa: BLE001
             self._json({"error": f"{type(e).__name__}: {e}"}, 500)
+
+    def _handle_speak(self, route: str, q: dict) -> None:
+        """GET /api/speak 与 /api/speak/voices：对外语音接口（环形的心/任意框架对接）。"""
+        uq = lambda k, d="": urllib.parse.unquote((q.get(k) or [d])[0])
+        if route == "/api/speak/voices":
+            voices = []
+            for v in library.list_voices():
+                if (v.get("status") or "ready") != "failed":
+                    voices.append({"name": v["name"], "provider": v.get("provider", ""),
+                                   "model": v.get("target_model", "")})
+            return self._json({"ok": True, "voices": voices})
+        voice = uq("voice") or "测试御姐"
+        text = uq("text")
+        rate = float(uq("rate", "1.0") or 1.0)
+        if not text.strip():
+            return self._json({"error": "text 不能为空"}, 400)
+        try:
+            result = flows.synthesize(text, voice, {"rate": rate})
+        except ProviderError as e:
+            return self._json({"error": str(e)}, 400)
+        ctype = "audio/wav" if result["ext"] == "wav" else "audio/mpeg"
+        if (q.get("json") or ["0"])[0] == "1":
+            body = json.dumps({"ok": True, "file": result["file"],
+                               "url": "/api/outputs/file?name=" + urllib.parse.quote(result["file"])},
+                              ensure_ascii=False).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        audio = open(result["path"], "rb").read()
+        self.send_response(200)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(len(audio)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(audio)
 
     def do_POST(self) -> None:
         parsed = urllib.parse.urlparse(self.path)
@@ -349,6 +421,18 @@ class Handler(BaseHTTPRequestHandler):
                 )
                 result["url"] = "/api/outputs/file?name=" + urllib.parse.quote(result["file"])
                 return self._json({"ok": True, **result})
+            if route == "/api/warm-previews":
+                body = self._body_json()
+                pid = str(body.get("provider") or (urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query).get("provider") or [""])[0])
+                import threading
+                def _warm():
+                    try:
+                        n = flows.warm_previews(pid)
+                        print(f"warm {pid}: {n} previews", file=sys.stderr)
+                    except Exception as e:
+                        print(f"warm {pid} fail: {e}", file=sys.stderr)
+                threading.Thread(target=_warm, daemon=True).start()
+                return self._json({"ok": True, "started": pid})
             if route == "/api/preview":
                 body = self._body_json()
                 result = flows.preview_voice(
@@ -357,7 +441,7 @@ class Handler(BaseHTTPRequestHandler):
                     target_model=str(body.get("target_model") or ""),
                     text=str(body.get("text") or ""),
                 )
-                result["url"] = "/api/outputs/file?name=" + urllib.parse.quote(result["file"])
+                result["url"] = "/api/preview-file?name=" + urllib.parse.quote(result["file"])
                 return self._json({"ok": True, **result})
             if route == "/api/clone-universal":
                 body = self._body_json()
@@ -368,7 +452,15 @@ class Handler(BaseHTTPRequestHandler):
                     reference_data_uri=str(body.get("ref_data_uri") or ""),
                     keep=bool(body.get("keep")),
                 )
-                result["url"] = "/api/outputs/file?name=" + urllib.parse.quote(result["file"])
+                result["url"] = "/api/preview-file?name=" + urllib.parse.quote(result["file"])
+                return self._json({"ok": True, **result})
+            if route == "/api/speak":
+                body = self._body_json()
+                result = flows.synthesize(
+                    str(body.get("text") or ""),
+                    str(body.get("voice") or ""),
+                    {"rate": float(body.get("rate") or 1.0)})
+                result["url"] = "/api/preview-file?name=" + urllib.parse.quote(result["file"])
                 return self._json({"ok": True, **result})
             if route == "/api/tts":
                 body = self._body_json()
@@ -388,7 +480,19 @@ class Handler(BaseHTTPRequestHandler):
             self._json({"error": f"{type(e).__name__}: {e}"}, 500)
 
 
+def _already_serving(port: int) -> bool:
+    import urllib.request
+    try:
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/status", timeout=1.5) as r:
+            return r.status == 200
+    except OSError:
+        return False
+
+
 def main() -> None:
+    if _already_serving(17878) or _already_serving(17879):
+        print("声来面板已在运行（本次启动取消，防止多进程僵尸）", file=sys.stderr)
+        sys.exit(0)
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", type=int, default=17878)
     args = parser.parse_args()

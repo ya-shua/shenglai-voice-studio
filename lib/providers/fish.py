@@ -42,6 +42,7 @@ def _multipart(fields, files, boundary: str) -> bytes:
 class FishAudioProvider(Provider):
     id = "fish"
     display_name = "Fish Audio"
+    tier = "免费额度"
     capabilities = ("enroll", "tts", "query", "catalog")
     config_schema = (
         {

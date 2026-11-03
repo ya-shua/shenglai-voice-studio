@@ -120,7 +120,7 @@ pip install demucs
 
 ---
 
-版本历史见 [docs/CHANGELOG.md](docs/CHANGELOG.md) ｜ 素材采集指南见 [docs/素材采集指南.md](docs/素材采集指南.md)
+版本历史见 [docs/CHANGELOG.md](docs/CHANGELOG.md) ｜ 素材采集指南见 [docs/素材采集指南.md](docs/素材采集指南.md) ｜ 环形的心对接见 [docs/环形的心对接.md](docs/环形的心对接.md)
 
 ## 许可证
 

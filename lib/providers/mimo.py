@@ -40,6 +40,7 @@ BUILTIN_VOICES = [
 class MiMoProvider(Provider):
     id = "mimo"
     display_name = "小米 MiMo TTS"
+    tier = "免费"
     capabilities = ("tts", "design", "clone", "catalog")
     config_schema = (
         {

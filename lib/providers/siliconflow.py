@@ -26,6 +26,7 @@ PRESETS = ["alex", "anna", "bella", "benjamin", "charles", "claire", "david", "d
 class SiliconFlowProvider(Provider):
     id = "siliconflow"
     display_name = "硅基流动 SiliconFlow"
+    tier = "性价比"
     capabilities = ("enroll", "tts", "catalog")
     config_schema = (
         {

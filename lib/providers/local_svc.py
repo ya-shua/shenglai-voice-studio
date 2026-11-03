@@ -21,6 +21,7 @@ from lib.providers.base import Provider, ProviderError
 class LocalSeedVCProvider(Provider):
     id = "local-svc"
     display_name = "本地 Seed-VC（免费换声）"
+    tier = "免费·本地"
     capabilities = ("convert", "separate")
     config_schema = (
         {
