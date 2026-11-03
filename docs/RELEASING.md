@@ -64,13 +64,13 @@ git commit -m "feat: 一句话说清改了什么；vx.y.z"
 
 本机不能用 SSH（token 没有 `admin:public_key` 权限），统一走 HTTPS + Personal Access Token。
 
-令牌位置：`C:\Users\Lenovo\Desktop\token.txt`（只含 40 位 token，账号 `ya-shua`，scope = `repo`）。
+令牌位置：**只存本机，不要把路径或值写进任何会提交的文件**（本文件 v1.4.1 曾误写路径，后已移除——历史无法改写，介意请轮换 PAT）。`<PAT 文件路径（勿写进仓库）>`（只含 40 位 token，账号 `ya-shua`，scope = `repo`）。
 
 **不要把 token 写进 `.git/config` 或任何文件**，用一次性环境变量传：
 
 ```powershell
 cd D:\AI\插件\plugins\voice-studio
-$pat = (Get-Content "C:\Users\Lenovo\Desktop\token.txt" -Raw).Trim()
+$pat = (Get-Content "<PAT 文件路径（勿写进仓库）>" -Raw).Trim()
 $b64 = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes("x-access-token:$pat"))
 $env:GIT_CONFIG_COUNT = "1"
 $env:GIT_CONFIG_KEY_0 = "http.extraHeader"
@@ -107,7 +107,7 @@ import base64, json, subprocess, sys, urllib.request
 from pathlib import Path
 
 ROOT = Path(r"D:\AI\插件\plugins\voice-studio")
-TOKEN = Path(r"C:\Users\Lenovo\Desktop\token.txt").read_text(encoding="utf-8").strip()
+TOKEN = Path(r"<PAT 文件路径（勿写进仓库）>").read_text(encoding="utf-8").strip()
 OWNER, REPO = "ya-shua", "shenglai-voice-studio"
 API = "https://api.github.com"
 
