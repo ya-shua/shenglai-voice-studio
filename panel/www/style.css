@@ -107,6 +107,64 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--a
 .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; }
 .row > label { flex: 1 1 150px; }
 .row.four > label { flex: 1 1 110px; }
+/* 标题行：文字 + 行内小按钮（如翻唱页「歌手音色 刷新」）——两列结构一致才能底部对齐 */
+label .cap { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+label .cap .mini { margin: 0 0 2px; }
+
+/* 用量统计（DeepSeek 风格柱状图） */
+.usage-head { display: flex; gap: 22px; font-size: 13px; margin: 6px 0 14px; }
+.usage-head b { font-size: 17px; }
+.usage-head .lab { color: var(--muted); font-size: 12px; }
+.usage-chart { display: flex; align-items: flex-end; gap: 8px; height: 130px; padding: 0 4px; }
+.usage-col { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; align-items: stretch; height: 100%; gap: 0; }
+.usage-bar { background: #d29a3a; border-radius: 3px 3px 0 0; min-height: 2px; }
+.usage-bar.zero { background: #4f6cf0; height: 3px !important; border-radius: 2px; }
+.usage-days { display: flex; gap: 8px; margin-top: 6px; padding: 0 4px; }
+.usage-days span { flex: 1; text-align: center; color: var(--muted); font-size: 11px; }
+
+/* 左下角更新提示横幅 */
+.update-banner {
+  position: fixed; left: 16px; bottom: 16px; z-index: 70;
+  display: flex; align-items: center; gap: 10px;
+  background: var(--panel2); border: 1px solid var(--accent);
+  border-radius: 12px; padding: 10px 14px; font-size: 13px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .4); max-width: 460px;
+}
+.update-banner.hidden { display: none; }
+
+/* 本地引擎模块：安装进度条 */
+.lmrow { align-items: flex-start; }
+.lm-bar { height: 10px; border-radius: 999px; background: #1d2536; overflow: hidden; margin: 8px 0 4px; }
+.lm-bar-in { height: 100%; background: var(--accent); border-radius: 999px; transition: width .4s; }
+.lm-bar-in.err { background: #b05a5a; }
+
+/* 翻唱引擎切换胶囊：可点击，当前高亮 */
+.statuschip.enginechip { cursor: pointer; transition: border-color .12s, color .12s; }
+.statuschip.enginechip:hover { border-color: var(--accent); color: var(--text); }
+.statuschip.eng-cur { border-color: var(--accent); color: var(--text); background: rgba(79, 140, 255, .14); }
+
+/* ---- 翻唱页 ---- */
+.cover-status { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 14px; }
+.statuschip {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 4px 11px; border-radius: 999px; font-size: 12px;
+  background: var(--panel2); border: 1px solid var(--border); color: var(--muted);
+}
+.statuschip .mini { padding: 1px 8px; }
+.cover-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 0 12px; }
+.cover-grid .span2 { grid-column: span 2; }
+.cover-grid .span4 { grid-column: span 4; }
+.cover-adv { display: flex; align-items: flex-start; gap: 12px; margin: 0 0 2px; }
+.cover-adv .adv-cap { font-size: 12px; color: var(--muted); padding: 10px 0 0; white-space: nowrap; }
+.cover-adv label { flex: 0 0 200px; margin: 0; }
+.cover-run { width: 100%; padding: 12px; font-size: 14px; margin: 10px 0 4px; }
+details.cover-guide { margin-top: 14px; }
+details.cover-guide summary { cursor: pointer; font-size: 14px; font-weight: 600; }
+details.cover-guide[open] summary { margin-bottom: 4px; }
+@media (max-width: 720px) {
+  .cover-grid { grid-template-columns: 1fr; }
+  .cover-grid .span2 { grid-column: auto; }
+}
 
 button {
   background: var(--panel2); color: var(--text); border: 1px solid var(--border);
@@ -132,9 +190,26 @@ button:disabled { opacity: .55; cursor: wait; }
   flex: 0 0 auto; font-size: 12px; color: var(--muted); white-space: nowrap;
 }
 .previewbar .inline-field select { width: auto; min-width: 130px; margin: 0; }
-/* 试听文字输入：已从「当前音色」条独立出来，单独占一行 */
-.hall-textrow { margin: 0 0 16px; }
-.hall-textrow input { width: 100%; margin: 0; }
+/* 试听播放器：住在「当前音色」条里、风格筛选旁边，不用再滚到底部找进度条 */
+#hall-player {
+  flex: 1 1 200px; min-width: 170px; width: auto; height: 34px;
+  margin: 0; align-self: center; border-radius: 8px;
+}
+/* 试听文字输入：双行大框，改字不用憋在一行里 */
+.hall-textrow { margin: 0 0 12px; }
+.hall-textrow textarea {
+  width: 100%; margin: 0; min-height: 58px; line-height: 1.5;
+  resize: vertical; padding: 9px 12px;
+}
+/* 正式合成行（原说话页并进来）：调参 + 合成按钮 + 说明 */
+.hall-params { margin: 0 0 10px; }
+.hall-synthrow { display: flex; align-items: center; gap: 12px; margin: 0 0 12px; flex-wrap: wrap; }
+.hall-synthrow .hint { margin: 0; flex: 1 1 240px; }
+.hall-outputs { margin-top: 6px; }
+.hall-outputs h3 { display: flex; align-items: center; gap: 10px; }
+.hall-outputs h3 .dim { font-weight: 400; font-size: 12px; flex: 1; }
+/* 我的音频显示上限：达到 20 条变固定高度滚轮，不再撑长页面 */
+.filelist.capped { max-height: 380px; overflow-y: auto; padding-right: 4px; }
 .pv-name { min-width: 120px; }
 .pv-name b { font-size: 14px; }
 .voicegrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(215px, 1fr)); gap: 14px; }
@@ -142,6 +217,7 @@ button:disabled { opacity: .55; cursor: wait; }
   background: var(--panel); border: 1px solid var(--border);
   border-radius: 10px; padding: 12px 14px; font-size: 13px;
   transition: all .15s ease;
+  display: flex; flex-direction: column;   /* 卡片纵向布局：按钮行永远贴底 */
 }
 .voicecard:hover { transform: translateY(-2px); border-color: var(--accent); box-shadow: 0 8px 20px rgba(0,0,0,.28); }
 .voicecard.hall-selected { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(79,140,255,.35); }
@@ -151,8 +227,16 @@ button:disabled { opacity: .55; cursor: wait; }
   display: inline-flex; align-items: center; justify-content: center;
   font-size: 15px; color: #fff;
 }
-.voicecard .actions { margin-top: 8px; display: flex; gap: 8px; }
-.voicecard .actions button { margin-top: 0; padding: 4px 12px; font-size: 12px; }
+.voicecard .actions { margin-top: auto; padding-top: 10px; display: flex; gap: 6px; }
+/* 按钮用固定内边距（不弹性拉伸）：同一颗按钮在任何卡片里都一样宽，跨卡对齐 */
+.voicecard .actions button {
+  margin-top: 0; padding: 7px 13px; font-size: 12px;
+  flex: 0 0 auto; white-space: nowrap; text-align: center;
+}
+/* 我的音色页：注册行 / 补素材行——标题与控件顶对齐，两列等宽 */
+.mine-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: end; }
+.mine-row label { margin: 0; }
+@media (max-width: 720px) { .mine-row { grid-template-columns: 1fr; } }
 
 .obadge { font-size: 11px; padding: 1px 8px; border-radius: 999px; border: 1px solid; white-space: nowrap; display: inline-block; margin: 2px 4px 2px 0; }
 .obadge.sing { color: #ffb454; border-color: #6b5426; }
@@ -221,6 +305,10 @@ button:disabled { opacity: .55; cursor: wait; }
   border: 1px solid var(--border); border-radius: 10px;
   padding: 12px 14px; margin: 8px 0; font-size: 14px;
 }
+/* 校验/报错文字独立成行（占满整行），按钮固定右侧不错位 */
+.prow .pvout-wrap { flex: 1 1 100%; order: 3; min-width: 0; }
+.prow .pvout-wrap span { display: block; word-break: break-all; line-height: 1.5; }
+.prow > div:last-child { margin-left: auto; flex: none; display: flex; gap: 6px; align-items: center; }
 .prow:hover { border-color: var(--accent); }
 .pdot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 8px; }
 .pdot.ok { background: var(--ok); }

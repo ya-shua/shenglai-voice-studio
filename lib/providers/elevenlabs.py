@@ -113,3 +113,18 @@ class ElevenLabsProvider(Provider):
             if vid:
                 out.append({"voice_id": str(vid), "name": str(v.get("name") or vid), "tags": ["英文", "官方音色"]})
         return out
+
+    def verify_key(self, cfg: dict) -> None:
+        """零成本探活：GET /v1/user（账户信息），401/403 即 Key 无效。"""
+        self.validate_config(cfg)
+        try:
+            raw, _ct = http_send(f"{self._base(cfg)}/v1/user", None, self._auth(cfg), 20, method="GET")
+        except ProviderError as e:
+            msg = str(e)
+            if "401" in msg or "403" in msg:
+                raise ProviderError("ElevenLabs API Key 无效——到「模型接入」页重新粘贴保存"
+                                    "（elevenlabs.io → Profile → API Keys）")
+            raise
+        if raw.strip():
+            return
+        raise ProviderError("ElevenLabs 校验响应为空")

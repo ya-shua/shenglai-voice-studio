@@ -36,6 +36,13 @@ def get_provider(provider_id: str) -> Provider:
     raise ProviderError(f"未知供应商: {provider_id}")
 
 
+def provider_ids() -> list[str]:
+    """全部供应商 id（内置 + 用户自定义）。大厅等聚合场景动态遍历用——
+    此前 hall_voices 写死四家 id，新适配器永远进不了大厅（MiniMax 就这么漏掉的）。"""
+    cfg = config.load_config()
+    return list(_BUILTIN) + ["custom:" + cid for cid in cfg["custom"]]
+
+
 def list_providers() -> list[dict]:
     cfg = config.load_config()
     out = []

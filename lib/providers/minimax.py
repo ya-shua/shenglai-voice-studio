@@ -82,15 +82,24 @@ class MiniMaxProvider(Provider):
         self.validate_config(cfg)
         model = target_model or str(cfg.get("model", "")).strip() or "speech-02-hd"
         rate = float((opts or {}).get("rate") or 1.0)
+        pitch = float((opts or {}).get("pitch") or 1.0)
+        vol = float((opts or {}).get("volume") or 50)
+        voice_setting = {
+            "voice_id": voice_id,
+            "speed": max(0.5, min(2.0, rate)),
+            "vol": max(0.2, min(2.0, vol / 50.0)),
+            "pitch": int(max(-12, min(12, round((pitch - 1.0) * 12)))),
+        }
+        # 原生情绪：t2a_v2 的 voice_setting.emotion（中文标签 → MiniMax 枚举）
+        mm_emotion = {"开心": "happy", "兴奋": "happy", "生气": "angry", "难过": "sad", "委屈": "sad"}
+        tag = str((opts or {}).get("emotion") or "")
+        if tag in mm_emotion:
+            voice_setting["emotion"] = mm_emotion[tag]
+            voice_setting["emotion_scale"] = 1.3
         payload = {
             "model": model,
             "text": text,
-            "voice_setting": {
-                "voice_id": voice_id,
-                "speed": max(0.5, min(2.0, rate)),
-                "vol": 1.0,
-                "pitch": 0,
-            },
+            "voice_setting": voice_setting,
             "audio_setting": {
                 "sample_rate": 32000,
                 "format": "mp3",
@@ -105,6 +114,21 @@ class MiniMaxProvider(Provider):
             msg = (data.get("base_resp") or {}).get("status_msg") or json.dumps(data, ensure_ascii=False)[:250]
             raise ProviderError(f"MiniMax 合成失败: {msg}")
         return bytes.fromhex(audio_hex), "mp3"
+
+    def verify_key(self, cfg: dict) -> None:
+        """零成本探活：故意用不存在的模型名打一次鉴权。
+        MiniMax 返回 HTTP 200 + base_resp.status：1004 = 鉴权失败；其他任何错误 = 已通过鉴权。"""
+        self.validate_config(cfg)
+        raw, _ct = http_send(self._url("/v1/t2a_v2", cfg),
+                             {"model": "key-check-probe", "text": ""},
+                             self._headers(cfg), 30, method="POST")
+        data = json.loads(raw.decode("utf-8", "replace"))
+        br = data.get("base_resp") or {}
+        status = str(br.get("status_code") or br.get("status") or "")
+        if status == "1004" or "login fail" in str(br.get("status_msg") or ""):
+            raise ProviderError("MiniMax API Key 无效——到「模型接入」页重新粘贴保存"
+                                "（platform.minimaxi.com → 账户管理 → 接口密钥）")
+        # 其他任何状态（模型不存在/参数错误等）= 已通过鉴权，Key 有效
 
     # ---- 音色克隆（voice_clone，50 元/音色首用解锁） ----
 

@@ -102,16 +102,30 @@ def load_registry() -> dict:
     try:
         data = json.loads(p.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
-        return {"voices": []}
+        # 文件坏了先看备份——曾经发生过并发写覆盖整个注册表的事故
+        try:
+            data = json.loads(p.with_suffix(".json.bak").read_text(encoding="utf-8"))
+            return data
+        except (OSError, json.JSONDecodeError):
+            return {"voices": []}
     if not isinstance(data.get("voices"), list):
         data["voices"] = []
     return data
 
 
 def save_registry(reg: dict) -> None:
-    _registry_path().write_text(
-        json.dumps(reg, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
+    """原子写 + 上一版备份：write_text 直写曾导致并发读到半截文件、整表被覆盖（2026-11-05）。"""
+    import os
+    p = _registry_path()
+    bak = p.with_suffix(".json.bak")
+    try:
+        if p.is_file():
+            bak.write_bytes(p.read_bytes())
+    except OSError:
+        pass  # 备份失败不阻塞保存
+    tmp = p.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(reg, ensure_ascii=False, indent=2), encoding="utf-8")
+    os.replace(tmp, p)  # 同盘原子替换，读者永远不会看到半截文件
 
 
 def upsert_voice(entry: dict) -> dict:
@@ -149,6 +163,24 @@ def remove_voice(name: str) -> bool:
 
 def list_voices() -> list[dict]:
     return load_registry()["voices"]
+
+
+# ---- 当前音色（TTS 输出默认音色）----
+
+def get_current_voice() -> str:
+    """对外输出（/api/speak 不带 voice 参数时）默认使用的音色名；空 = 未设置。"""
+    return str(load_registry().get("current") or "")
+
+
+def set_current_voice(name: str) -> bool:
+    """把某音色设为 TTS 输出默认（大厅「用她说话」/顶栏切换都会走这里）；不存在返回 False。"""
+    v = get_voice(name)
+    if not v:
+        return False
+    reg = load_registry()
+    reg["current"] = v["name"]
+    save_registry(reg)
+    return True
 
 
 # ---- 产出 ----

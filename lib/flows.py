@@ -1,6 +1,7 @@
 """业务流程：音色注册、快速克隆、手动登记、语音合成、翻唱换声（MCP 与面板共用）。"""
 from __future__ import annotations
 
+import json
 import time
 from pathlib import Path
 
@@ -201,10 +202,112 @@ def mimo_synthesize(mode: str, text: str, style: str = "", voice: str = "",
     return {"mode": mode, "file": path.name, "path": str(path), "size": len(data)}
 
 
+# ---- 跨平台复刻：拿 A 平台音色的样音素材，克隆到 B 平台，实现跨模型输出 ----
+
+_CC_SAMPLE_TEXT = ("你好，很高兴认识你。今天天气不错，我们出去走走吧。"
+                   "对了，昨天看的那部电影真的很不错，剧情紧凑，演员也演得特别好，值得再看一遍。")
+
+
+def cross_clone(source_provider: str, source_voice_id: str, target_provider: str,
+                new_name: str = "", text: str = "") -> dict:
+    """跨平台复刻：源音色的样音素材 → 目标平台克隆 → 正式登记成新音色。
+
+    素材来源（按优先）：
+    1. 官方样音直链（bailian 94 个 / siliconflow 8 个都有官方 demo mp3）
+    2. 试听缓存里已生成的样本（点过试听就有）
+    3. MiMo 内置音色：没有样音但合成免费，现场合成一段当素材
+    目标平台：mimo（参考音频一次直传，免费）/ bailian / siliconflow 等走快速克隆正式登记。
+    """
+    if source_provider == target_provider:
+        raise ProviderError("源和目标是同一个平台——这个音色本来就能在该平台直接用")
+    src_provider = get_provider(source_provider)
+    tgt_provider = get_provider(target_provider)
+    # 两种克隆形态都收：mimo 式「clone 直传」（参考音频一次请求）和 enroll+tts 式「注册登记」
+    direct_clone = "clone" in tgt_provider.capabilities
+    enroll_clone = "enroll" in tgt_provider.capabilities and "tts" in tgt_provider.capabilities
+    if not (direct_clone or enroll_clone):
+        raise ProviderError(f"{tgt_provider.display_name} 不支持音色克隆")
+    # 目标 Key 必须可用（跨克隆要花目标平台的额度，别让白填的 Key 静默失败）
+    vres = verify_provider_key(target_provider)
+    if vres.get("ok") is False:
+        raise ProviderError(f"{tgt_provider.display_name} 的 Key 还没就绪：{vres.get('message')}")
+
+    # ── 1. 取素材 ──
+    from lib import preview_audio, preview_store
+    material = b""
+    src_label = ""
+    demo = preview_audio.official_demo(source_provider, source_voice_id)
+    if demo:
+        material = http_download(demo[0])
+        src_label = "官方样音"
+    if not material:
+        from lib.providers import mimo as _mimo_mod
+        if isinstance(src_provider, _mimo_mod.MiMoProvider):
+            synth = mimo_synthesize("builtin", _CC_SAMPLE_TEXT, voice=source_voice_id)
+            material = (config.data_root() / "outputs" / synth["file"]).read_bytes()
+            src_label = "MiMo 免费合成样本"
+    if not material:
+        hit = preview_store.get(source_provider, source_voice_id, preview_store.DEFAULT_PREVIEW_TEXT)
+        if hit:
+            material = (config.data_root() / "preview_cache" / hit.name).read_bytes()
+            src_label = "试听缓存样本"
+    if len(material) < 40_000:
+        raise ProviderError("这个音色没有可用的样音素材（或太短）——先在试听里点一次它的试听，再回来复刻")
+    src_label = f"{src_label}（{len(material) // 1024} KB）"
+
+    # 源音色名（从目录反查，去掉「（MiMo 内置）」这类后缀）
+    src_name = source_voice_id
+    try:
+        for it in src_provider.catalog(config.provider_config(source_provider)):
+            if it.get("voice_id") == source_voice_id:
+                src_name = str(it.get("name") or source_voice_id).split("（")[0].strip()
+                break
+    except Exception:
+        pass
+
+    # ── 2. 目标克隆 + 登记 ──
+    tgt_short = tgt_provider.display_name.split("（")[0].strip()
+    base = library.sanitize_name(new_name or f"{src_name}·{tgt_short}")
+    name, i = base, 2
+    while library.get_voice(name):
+        name = f"{base}_{i}"
+        i += 1
+
+    tmp = config.data_root() / "materials" / "_incoming" / f"cc_{int(time.time()*1000)}.mp3"
+    tmp.parent.mkdir(parents=True, exist_ok=True)
+    tmp.write_bytes(material)
+    try:
+        use_text = (text or "").strip() or _CC_SAMPLE_TEXT
+        if target_provider == "mimo":
+            # MiMo 克隆是"参考音频直传"没有云端音色：素材落进素材库，音色条目指向素材文件
+            synth = mimo_synthesize("clone", use_text, reference_audio_path=str(tmp))
+            ref_dir = library.materials_dir(name)
+            ref_path = ref_dir / f"参考_{time.strftime('%m%d_%H%M%S')}.mp3"
+            ref_path.write_bytes(material)
+            entry = library.upsert_voice({
+                "name": name, "provider": "mimo",
+                "voice_id": f"mimo-ref:{ref_path.name}",
+                "target_model": "mimo-v2.5-tts-voiceclone", "status": "ready",
+                "note": f"跨平台复刻自「{src_name}」（{src_label}）",
+                "reference_path": str(ref_path),
+            })
+            return {"ok": True, "name": name, "provider": "mimo",
+                    "file": synth["file"], "src": f"{src_name}（{src_label}）", "voice": entry}
+        result = quick_clone(str(tmp), use_text, provider_id=target_provider,
+                             voice_name=name, keep_voice=True)
+        return {"ok": True, "name": name, "provider": target_provider,
+                "file": result.get("file", ""), "src": f"{src_name}（{src_label}）"}
+    finally:
+        tmp.unlink(missing_ok=True)
+
+
 def hall_voices() -> list:
-    """声音大厅：聚合各家官方免费音色目录（带分类标签）。未接入的供应商自动跳过。"""
+    """声音大厅：聚合各家官方免费音色目录（带分类标签）。
+    动态遍历全部供应商（含自定义）：谁声明了 catalog 能力谁就上大厅，
+    新增适配器自动同步出现——不再维护写死的供应商名单。未配置 Key 或目录暂不可用的自动跳过。"""
+    from lib.providers import provider_ids
     out = []
-    for pid in ("mimo", "bailian", "siliconflow", "elevenlabs"):
+    for pid in provider_ids():
         try:
             p = get_provider(pid)
             if "catalog" not in p.capabilities:
@@ -212,9 +315,21 @@ def hall_voices() -> list:
             items = p.catalog(config.provider_config(pid))
         except ProviderError:
             continue  # 未配置 Key 或目录暂不可用：大厅里不展示该来源
+        except Exception:
+            continue  # 单个适配器炸了不能拖垮整个大厅
+        configured = bool(str(config.provider_config(pid).get("api_key", "")).strip())
+        # 已配置的做一次零成本 Key 探活（5 分钟缓存）：Key 失效时卡片如实显示，
+        # 不再假装"可试听"——点下去才报 401 的体验就是这么来的
+        key_ok = None
+        if configured:
+            try:
+                r = verify_provider_key(pid)
+                if r.get("ok") is not None:
+                    key_ok = bool(r.get("ok"))
+            except Exception:
+                key_ok = None
         for it in items:
             vid = it.get("voice_id")
-            configured = bool(str(config.provider_config(pid).get("api_key", "")).strip())
             demo = None
             if not configured:
                 try:
@@ -230,9 +345,39 @@ def hall_voices() -> list:
                 "tags": it.get("tags", []),
                 "target_model": it.get("target_model", ""),
                 "official_demo": bool(demo),
-                "free_preview": configured or bool(demo),
+                "free_preview": bool(demo) or (configured and key_ok is not False),
+                "key_ok": key_ok,
             })
     return out
+
+
+# ---- Key 在线校验 ----
+
+_VERIFY_CACHE: dict = {}
+
+
+def verify_provider_key(pid: str) -> dict:
+    """在线校验某供应商的 Key。结果按「供应商+配置内容」缓存 5 分钟——
+    改 Key（哪怕贴回同一个）会生成新的缓存键，立即重新校验。
+    ok=None 表示该供应商不支持在线校验（不算失效）。"""
+    p = get_provider(pid)
+    cfg = config.provider_config(pid)
+    cache_key = (pid, json.dumps(cfg, sort_keys=True, ensure_ascii=False))
+    hit = _VERIFY_CACHE.get(cache_key)
+    if hit and time.time() - hit[0] < 300:
+        return {"ok": hit[1], "message": hit[2], "cached": True}
+    try:
+        p.verify_key(cfg)
+        out = (True, "✅ Key 有效")
+    except ProviderError as e:
+        msg = str(e)
+        if "暂不支持在线校验" in msg:
+            return {"ok": None, "message": msg}  # 不缓存、不标失效
+        out = (False, msg)
+    except Exception as e:
+        out = (False, "校验失败：%s" % e)
+    _VERIFY_CACHE[cache_key] = (time.time(), out[0], out[1])
+    return {"ok": out[0], "message": out[1]}
 
 
 def preview_voice(provider_id: str, voice_id: str, target_model: str = "", text: str = "") -> dict:
@@ -270,6 +415,8 @@ def preview_voice(provider_id: str, voice_id: str, target_model: str = "", text:
         cfg,
     )
     path = preview_store.put(provider_id, voice_id, text, data, ext=ext)
+    from lib import usage as _usage
+    _usage.record(provider_id, len(text), "preview")  # 试听也计费的平台要记账
     return {"file": path.name, "path": str(path), "size": len(data)}
 
 
@@ -387,6 +534,13 @@ def convert_vocal(audio_path: str, voice_name: str, strength: float = 0.8,
         )
         ext = _url_ext(result["url"], "wav")
     path = library.save_output(f"{voice['name']}_换声", ext, result["audio"])
+    # 环心留痕：换声产出
+    try:
+        from lib import ring_ingest
+        ring_ingest.notify(f"声来换声产出：用音色「{voice['name']}」换了一段干声（{src.name}）",
+                           points=["声来", "换声", voice["name"]])
+    except Exception:  # noqa: BLE001
+        pass
     return {"voice": voice["name"], "path": str(path), "size": len(result["audio"])}
 
 
@@ -437,6 +591,13 @@ def sing_cover(song_path: str, voice_name: str, strength: float = 0.8,
         )
         mix = audiomix.mix_audio(converted_path, backing_path, out)
         final_path, mix_method = mix["output"], mix["method"]
+    # 环心留痕：翻唱产出
+    try:
+        from lib import ring_ingest
+        ring_ingest.notify(f"声来翻唱产出：用音色「{voice['name']}」翻唱了《{song.name}》",
+                           points=["声来", "翻唱", voice["name"]])
+    except Exception:  # noqa: BLE001
+        pass
     return {
         "voice": voice["name"],
         "song": song.name,
@@ -485,6 +646,43 @@ def _sing_cover_local(song_path: str, voice_name: str, strength: float = 0.8,
     }
 
 
+# ---- 情绪（情绪插件联动入口：只需传一个词，声来折算成语速/音调/音量/语气）----
+
+EMOTION_PRESETS = {
+    # rate/pitch = 乘数；volume_delta = 加在默认 50 上；style = MiMo 原生语气词（其他模型自动忽略）
+    "开心": {"rate": 1.08, "pitch": 1.08, "volume_delta": +5,  "style": "语气欢快活泼，带着笑意"},
+    "兴奋": {"rate": 1.15, "pitch": 1.12, "volume_delta": +10, "style": "语气兴奋激动，能量拉满"},
+    "温柔": {"rate": 0.95, "pitch": 1.06, "volume_delta": 0,   "style": "语气温柔轻软，慢慢说"},
+    "生气": {"rate": 1.12, "pitch": 0.93, "volume_delta": +15, "style": "语气生气，硬邦邦的"},
+    "委屈": {"rate": 0.92, "pitch": 1.05, "volume_delta": -5,  "style": "语气委屈，带点哭腔"},
+    "难过": {"rate": 0.88, "pitch": 0.94, "volume_delta": -12, "style": "语气低落难过，有气无力"},
+    "撒娇": {"rate": 1.05, "pitch": 1.12, "volume_delta": 0,   "style": "语气撒娇拖长音，黏黏的"},
+    "困倦": {"rate": 0.85, "pitch": 0.96, "volume_delta": -10, "style": "语气困倦，半梦半醒"},
+    "得意": {"rate": 1.02, "pitch": 1.06, "volume_delta": +8,  "style": "语气得意，扬眉吐气"},
+}
+
+
+def emotion_names() -> list:
+    return ["默认"] + list(EMOTION_PRESETS.keys())
+
+
+def apply_emotion(opts: dict, emotion: str) -> dict:
+    """把情绪标签折算进合成参数。未知情绪原样跳过——调用方随便传不会炸。"""
+    preset = EMOTION_PRESETS.get(str(emotion or "").strip())
+    if not preset:
+        return dict(opts or {})
+    opts = dict(opts or {})
+    opts["rate"] = round(float(opts.get("rate") or 1.0) * preset.get("rate", 1.0), 3)
+    if preset.get("pitch"):
+        opts["pitch"] = round(float(opts.get("pitch") or 1.0) * preset["pitch"], 3)
+    if "volume_delta" in preset:
+        opts["volume"] = int(min(90, max(10, float(opts.get("volume") or 50) + preset["volume_delta"])))
+    if preset.get("style"):
+        opts["style"] = preset["style"]
+    opts["emotion"] = str(emotion or "").strip()  # 原始标签：MiniMax 等原生情绪接口按标签取用
+    return opts
+
+
 def synthesize(text: str, voice_name: str, opts: dict | None = None) -> dict:
     """用已注册音色合成语音，产出文件写入 outputs/ 并返回路径。"""
     if not (text or "").strip():
@@ -499,6 +697,10 @@ def synthesize(text: str, voice_name: str, opts: dict | None = None) -> dict:
     provider = get_provider(provider_id)
     if "tts" not in provider.capabilities:
         raise ProviderError(f"{provider.display_name} 不支持语音合成")
+    opts = dict(opts or {})
+    emotion = str(opts.pop("emotion", "") or "").strip()
+    if emotion and emotion != "默认":
+        opts = apply_emotion(opts, emotion)
     data, ext = provider.tts(
         text,
         voice["voice_id"],
@@ -508,6 +710,15 @@ def synthesize(text: str, voice_name: str, opts: dict | None = None) -> dict:
         voice_meta=voice,
     )
     path = library.save_output(name, ext, data)
+    from lib import usage as _usage
+    _usage.record(provider_id, len(text), "tts")  # 用量记账（失败不影响合成）
+    # 环心留痕：产出一句话音 → 闲聊圈自动入库（fire-and-forget，失败只打日志）
+    try:
+        from lib import ring_ingest
+        ring_ingest.notify(f"声来说话：用音色「{name}」说了一句「{str(text)[:80]}」",
+                           points=["声来", "语音产出", name])
+    except Exception:  # noqa: BLE001
+        pass
     return {
         "voice": name,
         "file": path.name,

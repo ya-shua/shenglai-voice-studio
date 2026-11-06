@@ -131,3 +131,22 @@ class SiliconFlowProvider(Provider):
             }
             for p in PRESETS
         ]
+
+    def verify_key(self, cfg: dict) -> None:
+        """零成本探活：GET /v1/models 只查模型列表，401 即 Key 无效。"""
+        self.validate_config(cfg)
+        try:
+            raw, _ct = http_send(f"{self._base(cfg)}/v1/models", None, self._auth(cfg), 20, method="GET")
+        except ProviderError as e:
+            msg = str(e)
+            if "401" in msg or "Unauthorized" in msg:
+                raise ProviderError("硅基流动 API Key 无效——到「模型接入」页重新粘贴保存"
+                                    "（cloud.siliconflow.cn → API 密钥，sk- 开头约 50 字符）")
+            raise
+        try:
+            data = json.loads(raw.decode("utf-8", "replace"))
+        except json.JSONDecodeError:
+            raise ProviderError(f"硅基流动校验响应异常: {raw[:200]!r}")
+        if isinstance(data.get("data"), list):
+            return
+        raise ProviderError(f"硅基流动 Key 校验异常: {json.dumps(data, ensure_ascii=False)[:200]}")

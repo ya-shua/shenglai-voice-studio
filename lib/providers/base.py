@@ -141,6 +141,11 @@ class Provider:
         """供应商可用的预置/自有音色目录（供「自由选模型」），返回 [{voice_id,name,target_model?}]。"""
         raise ProviderError(f"{self.display_name} 不提供音色目录")
 
+    def verify_key(self, cfg: dict) -> None:
+        """在线校验 Key 是否有效；无效抛 ProviderError（可读中文，引导去模型接入页）。
+        实现要求零成本（免费接口或探活技巧），别为校验偷偷花钱。默认不支持。"""
+        raise ProviderError(f"{self.display_name} 暂不支持在线校验，请直接试听验证")
+
     def delete(self, voice_id: str, cfg: dict) -> bool:
         raise ProviderError(f"{self.display_name} 不支持音色删除")
 

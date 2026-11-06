@@ -1,6 +1,6 @@
 {
   "name": "voice-studio",
-  "version": "1.7.0",
+  "version": "1.8.0",
   "description": "ShengLai (声来, pun on born-to-sing): cloud key-driven voice studio - one-sentence voice cloning, TTS, material generation and stable cover singing; 6 built-in providers + universal custom adapter",
   "author": {
     "name": "ya-shua"

@@ -74,6 +74,10 @@ class LocalSeedVCProvider(Provider):
             raise ProviderError(f"Seed-VC 目录里没有 inference.py: {root}")
         return root
 
+    def verify_key(self, cfg: dict) -> None:
+        """本地引擎没有 Key：目录里能找到 inference.py 就算就绪。"""
+        self._root(cfg)
+
     def _python(self, cfg: dict, root: Path) -> Path:
         p = str(cfg.get("python_exe", "")).strip()
         if p and Path(p).is_file():

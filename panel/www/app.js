@@ -136,26 +136,33 @@ async function renderVoices() {
     box.innerHTML = usable.map((v) => {
       const hue = hueOf(v.name);
       const initial = (v.name || "?").slice(0, 1);
+      const isCur = state.current === v.name;
       return `
-      <div class="voicecard" data-name="${esc(v.name)}">
+      <div class="voicecard${isCur ? " hall-selected" : ""}" data-name="${esc(v.name)}">
         <div class="vhead">
           <span class="avatar" style="background:hsl(${hue},55%,42%)">${esc(initial)}</span>
-          <div><b>${esc(v.name)}</b> <span class="dim">${esc(v.status || "ready")}</span></div>
+          <div><b>${esc(v.name)}</b> ${isCur ? '<span class="obadge tts">🟢 当前音色</span>' : `<span class="dim">${esc(v.status || "ready")}</span>`}</div>
         </div>
         <div class="dim">${esc(v.provider || "待注册")} · ${esc(v.voice_id || "-")}</div>
         <div class="dim">模型: ${esc(v.target_model || "默认")} · 素材 ${(v.materials || []).length} 个</div>
         <div class="actions">
+          ${isCur ? "" : `<button class="primary" data-setcur="${esc(v.name)}">设为当前</button>`}
           <button data-try="${esc(v.name)}">去说话</button>
           <button data-del="${esc(v.name)}">删除</button>
         </div>
       </div>`;
     }).join("");
-    box.querySelectorAll("[data-try]").forEach((b) =>
-      b.addEventListener("click", () => {
-        state.current = b.dataset.try;
+    box.querySelectorAll("[data-setcur]").forEach((b) =>
+      b.addEventListener("click", async () => {
+        state.current = b.dataset.setcur;
         try { localStorage.setItem("shenglai.voice", state.current); } catch (err) {}
-        loadVoices();
-        switchTask("speak");
+        await api("/api/voices/current", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: state.current }),
+        }).catch(() => {});
+        renderVoices();
+        renderCurrent();
+        toast(`已启动「${state.current}」——发语音就用这个声音`);
       })
     );
     box.querySelectorAll("[data-del], [data-delcloud]").forEach((b) =>
@@ -202,9 +209,6 @@ function renderCurrent() {
   set("#cur-wrap", !has);
   $("#btn-new").textContent = has ? "＋ 新建音色" : "开始创建";
   set("#home-list", !has);
-  set("#speak-pointer", !!v);
-  set("#speak-main", !v);
-  $("#sp-voice-label").textContent = v ? v.name : "（未选择音色）";
   $("#mt-voice-label").textContent = v ? v.name : "（未选择音色）";
   if (v) {
     showMaterials();
@@ -231,8 +235,8 @@ async function loadStatus() {
 }
 
 const PAGE_TITLES = {
-  hall: "免费音色", speak: "说话", create: "造声音",
-  mine: "我的音色", cover: "翻唱", settings: "模型接入", guide: "使用指南",
+  overview: "总览", mine: "我的音色", hall: "免费音色", create: "自由造音",
+  cover: "翻唱", settings: "模型接入", guide: "使用指南",
 };
 
 function switchTask(name) {
@@ -245,12 +249,46 @@ function switchTask(name) {
   });
   const title = $("#page-title");
   if (title) title.textContent = PAGE_TITLES[name] || "声来";
-  if (name === "hall") loadHall().then(() => warmCurrent());
-  if (name === "speak") loadOutputs();
+  if (name === "hall") { loadHall().then(() => warmCurrent()); loadOutputs(); }
   if (name === "create") { renderVoices(); loadCloneModels(); }
   if (name === "mine") { renderVoices(); showMaterials(); loadMaterialSourceVoices(); }
   if (name === "cover") loadCover();
-  if (name === "settings") renderProviderRows();
+  if (name === "overview") { renderUsage(); renderOverview(); }
+  if (name === "settings") { renderProviderRows(); renderLocalModules(); }
+}
+
+/* ---------------- 📊 总览页（资产/引擎/平台一览） ---------------- */
+
+async function renderOverview() {
+  const assets = $("#ov-assets"), engines = $("#ov-engines"), platforms = $("#ov-platforms");
+  if (!assets) return;
+  const st = state.status || await api("/api/status").catch(() => null);
+  const voiceCount = state.voices.filter((v) => (v.status || "ready") !== "failed").length;
+  const cur = state.current || "（未设置）";
+  if (assets) {
+    assets.innerHTML = `<div class="mine-row">
+      <div class="lmrow" style="padding:6px 0"><b>${voiceCount}</b> 个音色 · 当前使用「<b>${esc(cur)}</b>」</div>
+      <div class="lmrow" style="padding:6px 0">素材库：D:\\AI\\声音工坊\\materials\\</div>
+    </div>`;
+  }
+  try {
+    const lm = await api("/api/local-modules");
+    if (engines) {
+      engines.innerHTML = (lm.modules || []).map((m) => {
+        const dot = m.installed ? '<span class="pdot ok"></span>' : '<span class="pdot bad"></span>';
+        return `<div class="ov-line">${dot}<b>${esc(m.name)}</b>
+          <span class="dim">${m.installed ? "已安装" : "未安装"}${m.detail && m.installed ? ` · ${esc(m.detail)}` : ""}</span></div>`;
+      }).join("");
+    }
+  } catch (e) { if (engines) engines.innerHTML = `<p class="hint">本地引擎状态获取失败</p>`; }
+  if (platforms) {
+    const provs = (st && st.providers) || [];
+    platforms.innerHTML = provs.map((p) => {
+      const dot = p.configured ? '<span class="pdot ok"></span>' : '<span class="pdot bad"></span>';
+      return `<div class="ov-line">${dot}<b>${esc(p.display_name)}</b>
+        <span class="dim">${p.configured ? "已接入" : "未接入"}${p.tier ? ` · ${esc(p.tier)}` : ""}</span></div>`;
+    }).join("");
+  }
 }
 
 /* ---------------- MiMo 快速合成台 ---------------- */
@@ -303,8 +341,8 @@ function setCurrentAndRefresh(name) {
   const first = state.voices.length === 0;
   state.current = name;
   loadVoices();
-  switchTask("speak");
-  if (first) toast("🎉 第一个音色就绪！已切换到「说话」，让它开口吧");
+  switchTask("hall");
+  if (first) toast("🎉 第一个音色就绪！已切到「免费音色」，点音色卡让它开口吧");
 }
 
 /* 造声音：百炼要选目标模型，MiMo 免费版不需要 */
@@ -436,8 +474,9 @@ async function runTTS() {
   if (v.provider === "kits") return toast("Kits 音色是唱歌用的，说话请选其他音色", false);
   const btn = $("#tts-run");
   const payload = {
-    text: $("#tts-text").value,
+    text: $("#hall-text").value,
     voice_name: v.name,
+    emotion: ($("#tts-emotion") || {}).value || "默认",
     rate: parseFloat($("#tts-rate").value) || 1.0,
     pitch: parseFloat($("#tts-pitch").value) || 1.0,
     volume: parseInt($("#tts-volume").value, 10) || 50,
@@ -470,6 +509,8 @@ async function loadOutputs() {
   try {
     const { outputs } = await api("/api/outputs");
     const ul = $("#outputs");
+    // 显示上限：超过 20 条不再撑长页面，列表变固定高度滚轮
+    ul.classList.toggle("capped", outputs.length >= 20);
     if (!outputs.length) {
       ul.innerHTML = `<li class="dim">还没有产出</li>`;
     } else {
@@ -671,6 +712,8 @@ async function doEnroll(name, provider) {
 
 let hallAll = [];
 let hallSelected = null;
+let hallPreviewSeq = 0; // 试听序号：防止快速切换音色时旧的慢请求把新的播放结果顶掉
+let hallProviders = []; // 全量供应商（含 capabilities）：跨平台复刻目标列表用
 let hallModel = "";
 let hallProviderMap = {};
 
@@ -679,6 +722,7 @@ async function loadHall() {
   try {
     const [hallRes, provRes] = await Promise.all([api("/api/hall"), api("/api/providers")]);
     hallProviderMap = Object.fromEntries(provRes.providers.map((p) => [p.id, p.configured]));
+    hallProviders = provRes.providers || [];
     hallAll = hallRes.voices || [];
     // 模型下拉：只列有音色目录的；已接入排前，默认选中第一个已接入的
     const modelIds = [...new Set(hallAll.map((v) => v.provider))];
@@ -690,7 +734,12 @@ async function loadHall() {
     };
     $("#hall-model").innerHTML = order.map((pid) =>
       `<option value="${esc(pid)}">${tierOf(pid)}${esc(nameOf(pid))}${hallProviderMap[pid] ? " · 已接入" : " · 未接入"}</option>`).join("");
-    hallModel = order.find((pid) => hallProviderMap[pid]) || order[0] || "";
+    // 默认选中：第一个「已接入且 Key 有效」的（第一次打开不该看到一屏 Key 失效）；
+    // 全都失效时退回第一个已接入的（如实显示失效徽标）
+    const keyOk = (pid) => (hallAll.find((v) => v.provider === pid) || {}).key_ok !== false;
+    hallModel = order.find((pid) => hallProviderMap[pid] && keyOk(pid))
+      || order.find((pid) => hallProviderMap[pid])
+      || order[0] || "";
     if (hallModel) $("#hall-model").value = hallModel;
     fillHallStyle(hallAll.filter((v) => !hallModel || v.provider === hallModel));
     updateHallHint();
@@ -724,11 +773,14 @@ function renderHall() {
   grid.innerHTML = list.map((v) => {
     const hue = hueOf(v.voice_id);
     const initial = (v.name || "?").slice(0, 1);
-    const meta = esc(JSON.stringify({ provider: v.provider, voice_id: v.voice_id, target_model: v.target_model || "", name: v.name, provider_name: v.provider_name, tags: v.tags, free_preview: !!v.free_preview, official_demo: !!v.official_demo }));
-    const canPreview = (hallProviderMap[v.provider]) || v.free_preview;
-    const badge = canPreview
-      ? `<span class="obadge tts">✅ 可试听${(!hallProviderMap[v.provider]) ? "·样音" : ""}</span>`
-      : `<span class="obadge sing">🔑 待接入</span>`;
+    const meta = esc(JSON.stringify({ provider: v.provider, voice_id: v.voice_id, target_model: v.target_model || "", name: v.name, provider_name: v.provider_name, tags: v.tags, free_preview: !!v.free_preview, official_demo: !!v.official_demo, key_ok: (v.key_ok === undefined ? null : v.key_ok) }));
+    const canPreview = (hallProviderMap[v.provider] && v.key_ok !== false) || v.free_preview;
+    const keyInvalid = !!hallProviderMap[v.provider] && v.key_ok === false;
+    const badge = keyInvalid
+      ? `<span class="obadge sing">⚠️ Key 失效</span>`
+      : canPreview
+        ? `<span class="obadge tts">✅ 可试听${(!hallProviderMap[v.provider]) ? "·样音" : ""}</span>`
+        : `<span class="obadge sing">🔑 待接入</span>`;
     const selCls = hallSelected && hallSelected.voice_id === v.voice_id && hallSelected.provider === v.provider ? " hall-selected" : "";
     return `
     <div class="voicecard${selCls}" data-hselect='${meta}'>
@@ -746,7 +798,11 @@ function renderHall() {
   grid.querySelectorAll("[data-hselect]").forEach((card) =>
     card.addEventListener("click", (e) => {
       if (e.target.closest("button")) return;
-      selectHallVoice(JSON.parse(card.dataset.hselect));
+      const info = JSON.parse(card.dataset.hselect);
+      selectHallVoice(info);
+      // 切换音色即自动试听：直接用输入框里的文字（命中缓存秒开，进度条就在上方预览栏里）。
+      // Key 失效的模型只选中（不弹引导不空转报错）；未接入且无样音的也只选中——想接再点「▶ 试听」。
+      if ((hallProviderMap[info.provider] && info.key_ok !== false) || info.free_preview) runHallPreview($("#hall-run"));
     }));
   grid.querySelectorAll("[data-hpreview]").forEach((b) =>
     b.addEventListener("click", () => {
@@ -765,7 +821,19 @@ function renderHall() {
           method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ voice_name: name, provider: info.provider, voice_id: info.voice_id, target_model: info.target_model }),
         });
-        toast(`「${name}」已登记，去说话吧`);
+        // 设为 TTS 输出默认：/api/speak 不带 voice 参数时就用她（QQ 机器人跟随这个）
+        await api("/api/voices/current", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name }),
+        }).catch(() => {});
+        // 试听（官方样音录音，免费）≠ 发语音（实时合成，要 Key）——登记时就说清，别让人用的时候才发现
+        let warn = "";
+        if (info.key_ok === false) {
+          warn = ` ⚠️ 但发语音需要${info.provider_name}的 Key（当前失效）——想免费发语音，选小米 MiMo 的音色`;
+        } else if (!hallProviderMap[info.provider]) {
+          warn = ` ⚠️ 试听听到的是官方样音录音（免费）；正式发语音需要接入${info.provider_name}并填 Key——想现在就能发，选小米 MiMo 的音色`;
+        }
+        toast(`「${name}」已登记并设为 TTS 输出音色。${warn}`, !!warn);
         setCurrentAndRefresh(name);
       } catch (e) { toast("登记失败: " + e.message, false); }
     }));
@@ -803,7 +871,27 @@ function resetHallSelection() {
 function selectHallVoice(info) {
   hallSelected = info;
   $("#hall-sel-name").textContent = info.name;
-  $("#hall-sel-src").textContent = info.provider_name || "";
+  // 来源行直接说清"正式合成用哪家的 Key、现在能不能用"
+  const keyState = info.key_ok === false ? " · Key ❌ 失效，去模型接入页重贴"
+    : info.key_ok === true ? " · Key ✅ 合成可用"
+    : info.free_preview ? "" : " · 未接入（点试听会引导填 Key）";
+  $("#hall-sel-src").textContent = (info.provider_name || "") + keyState;
+  // 跨平台复刻目标：有克隆能力（enroll 注册式或 clone 直传式）+ 已接入 + Key 未失效的其他平台
+  const ccSel = $("#hall-cc-target");
+  if (ccSel) {
+    const keyOf = (pid) => (hallAll.find((x) => x.provider === pid) || {}).key_ok;
+    const targets = (hallProviders || []).filter((p) => {
+      const caps = p.capabilities || [];
+      const clonable = caps.includes("enroll") || caps.includes("clone");
+      return clonable && caps.includes("tts") && p.configured
+        && p.id !== info.provider && keyOf(p.id) !== false;
+    });
+    ccSel.innerHTML = targets.map((p) =>
+      `<option value="${esc(p.id)}">${esc(p.display_name.split("（")[0])}</option>`).join("");
+    ccSel.classList.toggle("hidden", !targets.length);
+    const run = $("#hall-cc-run");
+    if (run) run.classList.toggle("hidden", !targets.length);
+  }
   const hue = hueOf(info.voice_id);
   const av = $("#hall-sel-avatar");
   av.style.background = `hsl(${hue},55%,42%)`;
@@ -818,6 +906,7 @@ function selectHallVoice(info) {
 
 async function runHallPreview(btn) {
   if (!hallSelected) return toast("先点一张音色卡选中", false);
+  const seq = ++hallPreviewSeq; // 快速连点多个音色时，只让最后一次的结果真正播放
   const doOnce = async () => {
     const text = ($("#hall-text").value || "").trim().slice(0, 100);
     if (!text) return toast("请填试听文字", false);
@@ -837,8 +926,11 @@ async function runHallPreview(btn) {
         });
         url = res.url;
       }
+      if (seq !== hallPreviewSeq) { busy(btn, false); return; } // 已经切到别的音色了，丢弃这次过期结果
       const p = $("#hall-player");
-      p.src = url + "&t=" + Date.now();
+      // 缓存戳只拼给内部链接（/api/preview-file?name=X 本来就带 ?）；
+      // 阿里官方样音是外链且无查询参数，拼 &t= 会变成非法 URL（404 XML → Format error）
+      p.src = /^https?:/i.test(url) ? url : url + "&t=" + Date.now();
       p.classList.remove("hidden");
       p.play().catch(() => {});
     } catch (e) { throw e; }
@@ -866,6 +958,121 @@ async function warmCurrent() {
   } catch (e) { /* 预热失败不影响使用 */ }
 }
 
+/* ---------------- 🧩 本地引擎模块（翻唱引擎的一键安装管理） ---------------- */
+
+let lmTimer = null;
+
+async function renderLocalModules() {
+  const box = $("#local-modules");
+  if (!box) return;
+  const { modules } = await api("/api/local-modules").catch(() => ({ modules: [] }));
+  box.innerHTML = modules.map((m) => {
+    const dot = m.installed ? '<span class="pdot ok"></span>' : '<span class="pdot bad"></span>';
+    const running = m.status === "running" || m.status === "cancelling";
+    const showBar = running || m.status === "done" || m.status === "error";
+    const btn = running
+      ? `<button class="mini" data-lm-cancel="${esc(m.id)}">取消</button>`
+      : (!m.installed && m.installable ? `<button class="mini" data-lm-install="${esc(m.id)}">一键安装</button>` : "");
+    // 已安装的手动部署型（Seed-VC）：给「复制目录」方便定位；没有安装按钮是因为已经装好了
+    const copyDir = (m.installed && m.dir)
+      ? `<button class="mini" data-lm-copy="${esc(m.dir)}">复制目录</button>` : "";
+    const uninst = (m.installed && m.id === "rvc" && !running)
+      ? `<button class="mini" data-lm-uninstall="${esc(m.id)}">卸载</button>` : "";
+    const dirField = (!m.installed && m.installable && m.id === "rvc")
+      ? `<label style="display:block;margin:8px 0 0;font-size:12px">安装到目录<input class="lm-dir" value="${esc(m.dir || "")}" style="width:100%;margin:4px 0 0"></label>` : "";
+    const bar = showBar
+      ? `<div class="lm-bar"><div class="lm-bar-in${m.status === "error" ? " err" : ""}" style="width:${m.pct || 0}%"></div></div>`
+      : "";
+    const detail = (running || m.status === "done" || m.status === "error") && m.detail
+      ? `<div class="dim" ${m.status === "error" ? 'style="color:#ffb0b0"' : ""}>${esc(m.detail)}</div>` : "";
+    const stateLine = m.installed || running || m.status === "done" || m.status === "error"
+      ? `<div class="dim">${m.installed && !running && m.status !== "done" ? "状态：" : ""}${esc(m.detail || (m.installed ? "已安装" : ""))}</div>` : "";
+    return `<div class="prow lmrow">
+      <div class="grow">${dot}<b>${esc(m.name)}</b> <span class="obadge conv">${esc(m.deploy)}</span>
+        <div class="dim">${esc(m.compute)} · ${esc(m.size)}</div>
+        <div class="dim">${esc(m.desc)}</div>
+        ${dirField}${stateLine}${bar}${detail}
+      </div>
+      <div>${btn}${copyDir}${uninst}</div>
+    </div>`;
+  }).join("");
+  box.querySelectorAll("[data-lm-copy]").forEach((b) =>
+    b.addEventListener("click", async () => {
+      try { await navigator.clipboard.writeText(b.dataset.lmCopy); toast("目录路径已复制"); }
+      catch (err) { toast(b.dataset.lmCopy); }
+    }));
+  box.querySelectorAll("[data-lm-install]").forEach((b) =>
+    b.addEventListener("click", async () => {
+      b.disabled = true; b.textContent = "启动中…";
+      const dir = b.closest(".lmrow")?.querySelector(".lm-dir")?.value?.trim() || "";
+      try {
+        const r = await api("/api/local-modules/install", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: b.dataset.lmInstall, dir }),
+        });
+        if (!r.ok) { toast(r.error || "无法启动安装", false); b.disabled = false; b.textContent = "一键安装"; }
+      } catch (e) { toast("启动失败: " + e.message, false); b.disabled = false; b.textContent = "一键安装"; }
+      renderLocalModules();
+    }));
+  box.querySelectorAll("[data-lm-uninstall]").forEach((b) =>
+    b.addEventListener("click", async () => {
+      if (b.dataset.armed !== "1") {
+        b.dataset.armed = "1"; b.dataset.orig = b.textContent;
+        b.textContent = "确认卸载?"; b.style.borderColor = "#ff6b6b";
+        setTimeout(() => { if (b.isConnected && b.dataset.armed === "1") { b.dataset.armed = ""; b.textContent = b.dataset.orig; b.style.borderColor = ""; } }, 3000);
+        return;
+      }
+      b.disabled = true; b.textContent = "卸载中…";
+      try {
+        const r = await api("/api/local-modules/uninstall", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: b.dataset.lmUninstall }),
+        });
+        toast(r.message || (r.ok ? "已卸载" : "卸载失败"), r.ok !== false);
+      } catch (e) { toast("卸载失败: " + e.message, false); }
+      renderLocalModules();
+    }));
+  box.querySelectorAll("[data-lm-cancel]").forEach((b) =>
+    b.addEventListener("click", async () => {
+      await api("/api/local-modules/cancel", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: b.dataset.lmCancel }),
+      }).catch(() => {});
+      renderLocalModules();
+    }));
+  const anyRunning = modules.some((m) => m.status === "running" || m.status === "cancelling");
+  if (anyRunning) { clearTimeout(lmTimer); lmTimer = setTimeout(renderLocalModules, 1500); }
+}
+
+/* ---------------- 📊 用量统计（本地记账，DeepSeek 风格柱状图） ---------------- */
+
+async function renderUsage() {
+  const head = $("#usage-head"), chart = $("#usage-chart"), daysEl = $("#usage-days"), note = $("#usage-note");
+  if (!chart) return;
+  const data = await api("/api/usage").catch(() => null);
+  if (!data) { chart.innerHTML = '<p class="hint">用量数据加载失败</p>'; return; }
+  const days = data.days || [];
+  const maxChars = Math.max(...days.map((d) => d.chars), 1);
+  head.innerHTML = `
+    <span><div class="lab">今日合成</div><b>${data.today.count}</b> 次</span>
+    <span><div class="lab">今日字数</div><b>${data.today.chars}</b></span>
+    <span><div class="lab">14 天累计</div><b>${data.total.chars}</b> 字 / ${data.total.count} 次</span>
+    <span><div class="lab">14 天预估费用</div><b>¥${(data.total.cost || 0).toFixed(2)}</b></span>`;
+  chart.innerHTML = days.map((d) => {
+    const h = Math.max(2, Math.round(d.chars / maxChars * 118));
+    const tips = Object.entries(d.providers || {}).map(([p, c]) => `${p}: ${c} 字`).join("；");
+    const cls = d.chars ? "usage-bar" : "usage-bar zero";
+    return `<div class="usage-col" title="${d.date}｜${d.count} 次｜${tips || "无合成"}${d.cost ? `｜约 ¥${d.cost}` : ""}">
+      <div class="${cls}" style="height:${h}px"></div></div>`;
+  }).join("");
+  daysEl.innerHTML = days.map((d) => `<span>${d.date}</span>`).join("");
+  const prices = data.prices || {};
+  const set = Object.entries(prices).map(([p, v]) => `${p}=${v}元/千字`).join("、");
+  note.textContent = set
+    ? `费用为估算（单价：${set}）；改单价：D:\\AI\\声音工坊\\config.json 的 usage_prices（元/千字符）`
+    : "未设单价——只统计量。想估算费用：config.json 加 usage_prices（如 {\"bailian\": 0.2} = 每千字 0.2 元）";
+}
+
 /* ---------------- 🎵 翻唱 ---------------- */
 
 async function loadCover() {
@@ -875,19 +1082,24 @@ async function loadCover() {
   if (!st) { box.textContent = "状态获取失败"; return; }
   const prov = (st.providers || []).find((p) => p.id === engine);
   const voices = state.voices.filter((v) => v.provider === engine && v.status !== "failed");
+  const localProv = (st.providers || []).find((p) => p.id === "local-svc");
+  const localVoices = state.voices.filter((v) => v.provider === "local-svc" && v.status !== "failed");
+  const kitsProv = (st.providers || []).find((p) => p.id === "kits");
   const lines = [];
+  // 引擎状态胶囊 = 引擎切换器：点哪个切哪个，当前高亮
+  const chip = (cur, txt, engId) =>
+    `<span class="statuschip enginechip${cur ? " eng-cur" : ""}" data-eng="${engId}" title="点击切换引擎">${txt}${cur ? " · 当前引擎" : " · 点击切换"}</span>`;
+  lines.push(chip(engine === "local-svc",
+    localProv && localProv.configured
+      ? `✅ 本地 Seed-VC（免费·零训练）：就绪${localVoices.length ? ` · 参考音色 ${localVoices.length} 个` : ""}`
+      : "❌ 本地 Seed-VC：未配置目录",
+    "local-svc"));
+  lines.push(chip(engine === "kits",
+    kitsProv && kitsProv.configured ? "✅ Kits.AI（付费·多素材训练）：已配置" : "◻ Kits.AI（付费·多素材训练）：未配置",
+    "kits"));
   if (engine === "local-svc") {
-    lines.push(prov && prov.configured
-      ? "✅ 本地 Seed-VC 已就绪（demucs 分离 + Seed-VC 换声，全程免费）"
-      : `❌ 还没配置本地 Seed-VC 目录 <button class="mini" data-local-setup="1">去设置</button>`);
-    lines.push("ℹ 本机 CPU 跑：整曲约 3~10 分钟，步数低更快");
-    lines.push(voices.length
-      ? `✅ 本地参考音色 ${voices.length} 个`
-      : `⚠ 没有本地参考音色：造声音 → 登记已有 → 来源选「本地 Seed-VC」，voice_id 填参考音频路径（10~30 秒干声）`);
+    // 参考音色为空时下拉里已显示「(无可用音色)」，不再额外堆提示小字
   } else {
-    lines.push(prov && prov.configured
-      ? "✅ Kits.AI 已配置"
-      : `❌ 未配置 Kits.AI Key（需订阅） <button class="mini" data-kits-setup="1">立即接入</button>`);
     lines.push(st.ffmpeg
       ? "✅ ffmpeg 已安装（任意格式自动混音）"
       : "⚠ 未装 ffmpeg：wav 可直混；mp3 伴奏需安装 ffmpeg");
@@ -895,7 +1107,7 @@ async function loadCover() {
       ? `✅ 歌手音色 ${voices.length} 个`
       : `⚠ 没有歌手音色：在 kits.ai 用多段唱歌素材训练后，点 <button class="mini" data-kits-voice="1">登记歌手音色</button>`);
   }
-  box.innerHTML = lines.join("<br>");
+  box.innerHTML = lines.map((l) => `<span class="statuschip">${l}</span>`).join("");
   $("#cover-form").classList.toggle("hidden", !(prov && prov.configured));
   const sel = $("#sc-voice");
   sel.innerHTML = voices.map((v) => `<option value="${esc(v.name)}">${esc(v.name)}</option>`).join("")
@@ -1033,12 +1245,38 @@ async function renderProviderRows() {
     const btn = p.configured
       ? `<button class="mini" data-pedit="${esc(p.id)}">编辑</button>${del}`
       : `<button class="mini" data-pedit="${esc(p.id)}">接入</button>`;
+    // 已配置的加「测试」：零成本在线校验 Key，贴完立刻知道行不行（不再等到合成失败才发现）
+    const test = p.configured ? ` <button class="mini" data-pverify="${esc(p.id)}">测试</button>` : "";
     const tierTag = p.tier ? `<span class="obadge conv">${esc(p.tier)}</span> ` : "";
     return `<div class="prow">
-      <div class="grow">${dot}<b>${esc(p.display_name)}</b>${tag} ${tierTag}</div>
-      <div>${btn}</div>
+      <div class="grow">${dot}<b>${esc(p.display_name)}</b>${tag} ${tierTag}
+        <div class="pvout-wrap"><span class="dim" data-pvout></span></div>
+      </div>
+      <div>${btn}${test}</div>
     </div>`;
   }).join("");
+  box.querySelectorAll("[data-pverify]").forEach((b) =>
+    b.addEventListener("click", async () => {
+      const pid = b.dataset.pverify;
+      const out = b.closest(".prow").querySelector("[data-pvout]");
+      b.disabled = true; b.textContent = "测试中…";
+      if (out) out.textContent = "";
+      try {
+        const r = await api("/api/verify-key", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ provider: pid }),
+        });
+        if (out) {
+          out.textContent = r.message || (r.ok ? "✅" : "❌");
+          out.style.color = r.ok === true ? "var(--ok, #7ee2a8)" : r.ok === false ? "#ffb0b0" : "";
+        }
+        if (r.ok === false) toast(r.message || "Key 无效", false);
+      } catch (e) {
+        if (out) { out.textContent = "测试失败"; out.style.color = "#ffb0b0"; }
+        toast("测试失败: " + e.message, false);
+      }
+      b.disabled = false; b.textContent = "测试";
+    }));
 }
 
 async function openAddPanel(tabName, preselect) {
@@ -1212,21 +1450,73 @@ function wire() {
   $$("#side-nav button, .side-foot button").forEach((b) =>
     b.addEventListener("click", () => switchTask(b.dataset.task)));
   // 顶栏
-  on("#btn-quit", "click", async () => {
-    if (!confirm("关闭声来面板？\n关闭后要重新双击桌面「声来」才能再打开。")) return;
-    try { await fetch("/api/shutdown", { method: "POST" }); } catch (err) {}
-    document.body.innerHTML =
-      '<div style="display:flex;height:100vh;align-items:center;justify-content:center;flex-direction:column;gap:14px;' +
-      'font:15px system-ui;color:#6b7280;background:#fff">' +
-      '<div style="font-size:44px">🎙️</div><div style="font-size:18px;color:#111827">声来面板已关闭</div>' +
-      '<div style="font-size:13px">可以关掉这个标签页了；下次双击桌面「声来」重新启动</div></div>';
+  // 关闭 = 只关浏览器标签页；面板进程保留在后台（127.0.0.1:17878 随时回来）
+  on("#btn-quit", "click", () => {
+    try { window.close(); } catch (err) {}
+    setTimeout(() => {
+      if (!window.closed) {
+        document.body.innerHTML =
+          '<div style="display:flex;height:100vh;align-items:center;justify-content:center;flex-direction:column;gap:14px;' +
+          'font:15px system-ui;color:#6b7280;background:#fff">' +
+          '<div style="font-size:44px">🎙️</div><div style="font-size:18px;color:#111827">声来仍在后台运行</div>' +
+          '<div style="font-size:13px">直接关闭这个标签页即可；再次访问 127.0.0.1:17878 随时回来</div></div>';
+      }
+    }, 300);
   });
   on("#cur-voice", "change", (e) => {
     state.current = e.target.value;
     try { localStorage.setItem("shenglai.voice", state.current); } catch (err) {}
     renderCurrent();
+    // 同步到服务端：/api/speak 不带 voice 参数时用她（QQ 机器人跟随这个）
+    api("/api/voices/current", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: e.target.value }),
+    }).catch(() => {});
     toast("已切换到「" + state.current + "」");
   });
+  // 左下角更新提示：发现 git 新版本 → 一键更新（fetch+checkout+自动重启）
+  let updateDismissed = false;
+  async function checkUpdate() {
+    if (updateDismissed) return;
+    const r = await api("/api/update-check").catch(() => null);
+    if (!r || !r.has_update) return;
+    const b = $("#update-banner");
+    if (!b || !b.classList.contains("hidden")) return;
+    $("#update-text").textContent = `🚀 发现新版本 v${r.latest}（当前 v${r.local}）`;
+    b.classList.remove("hidden");
+  }
+  on("#update-go", "click", async () => {
+    const btn = $("#update-go"), txt = $("#update-text");
+    btn.disabled = true; btn.textContent = "更新中…";
+    txt.textContent = "正在拉取新版本并重启面板…（约 10 秒）";
+    const r = await api("/api/update", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: "{}",
+    }).catch((e) => ({ ok: false, error: e.message }));
+    if (!r.ok) {
+      txt.textContent = "更新失败：" + (r.error || "未知原因");
+      btn.disabled = false; btn.textContent = "重试";
+      return;
+    }
+    txt.textContent = r.message || "更新完成，面板重启中…";
+    // 轮询等新面板起来（旧进程退出 → 中转拉起新面板），然后刷新拿新前端
+    let tries = 0;
+    const poll = setInterval(async () => {
+      tries++;
+      try {
+        await fetch("/api/status", { cache: "no-store" });
+        clearInterval(poll);
+        location.reload();
+      } catch (err) {
+        if (tries > 20) { clearInterval(poll); txt.textContent = "重启超时——请手动刷新页面"; }
+      }
+    }, 2000);
+  });
+  on("#update-skip", "click", () => {
+    updateDismissed = true;
+    $("#update-banner").classList.add("hidden");
+  });
+  checkUpdate();
+  setInterval(checkUpdate, 5 * 60 * 1000);
   // 发现：造声音
   $$(".wizintent").forEach((b) => b.addEventListener("click", () => switchIntent(b.dataset.intent)));
   on("#vd-run", "click", runDesign);
@@ -1236,7 +1526,23 @@ function wire() {
   on("#pk-refresh", "click", loadPickCatalog);
   on("#pk-register", "click", registerPick);
   // 说话
-  on("#tts-text", "keydown", (e) => { if ((e.ctrlKey || e.metaKey) && e.key === "Enter") runTTS(); });
+  on("#hall-cc-run", "click", async () => {
+    if (!hallSelected) return toast("先选一张音色卡", false);
+    const target = ($("#hall-cc-target") || {}).value;
+    if (!target) return toast("没有可用的复刻目标平台（需要有克隆能力且 Key 就绪）", false);
+    const btn = $("#hall-cc-run");
+    busy(btn, true, "复刻中…");
+    try {
+      const r = await api("/api/cross-clone", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ source: hallSelected.provider, voice_id: hallSelected.voice_id, target }),
+      });
+      toast(`✅ 已复刻为「${r.name}」（素材：${r.src}），立即可发语音`);
+      setCurrentAndRefresh(r.name);
+    } catch (e) { toast("复刻失败: " + e.message, false); }
+    busy(btn, false);
+  });
+  on("#hall-text", "keydown", (e) => { if ((e.ctrlKey || e.metaKey) && e.key === "Enter") runTTS(); });
   on("#out-refresh", "click", loadOutputs);
   document.querySelectorAll("[data-gohall]").forEach((b) =>
     b.addEventListener("click", () => switchTask("hall")));
@@ -1256,6 +1562,23 @@ function wire() {
   on("#sc-engine", "change", loadCover);
   on("#cover-check", "click", (e) => {
     if (e.target.closest("[data-local-setup]")) switchTask("settings");
+    const engChip = e.target.closest("[data-eng]");
+    if (engChip) {
+      const sel = $("#sc-engine");
+      if (sel && sel.value !== engChip.dataset.eng) {
+        sel.value = engChip.dataset.eng;
+        loadCover();
+        toast("已切换引擎");
+      }
+      return;
+    }
+    if (e.target.closest("[data-use-local]")) {
+      const sel = $("#sc-engine");
+      if (sel) { sel.value = "local-svc"; }
+      loadCover();
+      toast("已切到免费本地引擎（Seed-VC）");
+      return;
+    }
     if (e.target.closest("[data-kits-setup]")) ensureProvider("kits", loadCover);
     if (e.target.closest("[data-kits-voice]")) {
       switchTask("create");
@@ -1277,7 +1600,16 @@ function wire() {
       const pid = edit.dataset.pedit;
       if (pid.startsWith("custom:")) openAddPanel("custom");
       else openAddPanel("builtin", pid);
-      window.scrollTo({ top: 0, behavior: "smooth" });
+      // 滚到表单（在页面中部，不在顶部）+ 描边高亮——"点了没反馈"就是这么来的
+      setTimeout(() => {
+        const panel = $("#addmodel-panel");
+        if (panel && !panel.hidden) {
+          panel.scrollIntoView({ behavior: "smooth", block: "center" });
+          panel.style.outline = "2px solid var(--accent)";
+          panel.style.borderRadius = "10px";
+          setTimeout(() => { panel.style.outline = ""; }, 1800);
+        }
+      }, 100);
       return;
     }
     const del = e.target.closest("[data-pdel]");
@@ -1324,7 +1656,7 @@ function wire() {
 
   await loadStatus();
   await loadVoices();
-  switchTask(state.voices.length ? "speak" : "hall");
+  switchTask("overview"); // 落地页 = 第一页「总览」
   loadMaterialSourceVoices();
   loadCloneModels();
   loadOutputs();

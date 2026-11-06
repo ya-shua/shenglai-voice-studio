@@ -20,6 +20,10 @@ PLUGIN_ROOT = Path(__file__).resolve().parents[1]
 if str(PLUGIN_ROOT) not in sys.path:
     sys.path.insert(0, str(PLUGIN_ROOT))
 
+from lib import local_modules  # noqa: E402  本地引擎模块管理器
+from lib import usage as local_usage  # noqa: E402  用量记账
+from lib import local_update  # noqa: E402  更新检查与一键更新
+
 from lib import config, flows, library  # noqa: E402
 from lib.providers import ProviderError, get_provider, list_providers  # noqa: E402
 
@@ -172,6 +176,12 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({"voices": library.list_material_voices()})
             if route == "/api/hall":
                 return self._json({"ok": True, "voices": flows.hall_voices()})
+            if route == "/api/local-modules":
+                return self._json({"ok": True, "modules": local_modules.list_modules()})
+            if route == "/api/update-check":
+                return self._json({"ok": True, **local_update.check()})
+            if route == "/api/usage":
+                return self._json({"ok": True, **local_usage.aggregate(14)})
             if route == "/api/speak" or route == "/api/speak/voices":
                 return self._handle_speak(route, q)
             if route == "/api/preview-cache":
@@ -242,14 +252,15 @@ class Handler(BaseHTTPRequestHandler):
                 if (v.get("status") or "ready") != "failed":
                     voices.append({"name": v["name"], "provider": v.get("provider", ""),
                                    "model": v.get("target_model", "")})
-            return self._json({"ok": True, "voices": voices})
-        voice = uq("voice") or "测试御姐"
+            return self._json({"ok": True, "voices": voices, "current": library.get_current_voice()})
+        voice = uq("voice") or library.get_current_voice() or "测试御姐"
         text = uq("text")
         rate = float(uq("rate", "1.0") or 1.0)
+        emotion = uq("emotion")  # 情绪标签（开心/生气/温柔…）：情绪插件联动入口
         if not text.strip():
             return self._json({"error": "text 不能为空"}, 400)
         try:
-            result = flows.synthesize(text, voice, {"rate": rate})
+            result = flows.synthesize(text, voice, {"rate": rate, "emotion": emotion})
         except ProviderError as e:
             return self._json({"error": str(e)}, 400)
         ctype = "audio/wav" if result["ext"] == "wav" else "audio/mpeg"
@@ -324,6 +335,41 @@ class Handler(BaseHTTPRequestHandler):
                     note=str(body.get("note") or ""),
                 )
                 return self._json({"ok": True, "voice": entry})
+            if route == "/api/voices/current":
+                # 设为 TTS 输出默认音色（大厅「用她说话」/顶栏切换都会调这里）
+                body = self._body_json()
+                name = str(body.get("name") or "")
+                if not library.set_current_voice(name):
+                    return self._json({"ok": False, "error": f"音色「{name}」不存在"}, 404)
+                return self._json({"ok": True, "current": name})
+            if route == "/api/verify-key":
+                # 在线校验某供应商的 Key（零成本探活，5 分钟缓存）
+                body = self._body_json()
+                try:
+                    return self._json(flows.verify_provider_key(str(body.get("provider") or "")))
+                except ProviderError as e:
+                    return self._json({"ok": False, "message": str(e)}, 400)
+            if route == "/api/cross-clone":
+                # 跨平台复刻：源音色样音素材 → 目标平台克隆登记
+                body = self._body_json()
+                try:
+                    return self._json(flows.cross_clone(
+                        str(body.get("source") or ""), str(body.get("voice_id") or ""),
+                        str(body.get("target") or ""), new_name=str(body.get("name") or "")))
+                except ProviderError as e:
+                    return self._json({"ok": False, "error": str(e)}, 400)
+            if route == "/api/local-modules/install":
+                body = self._body_json()
+                return self._json(local_modules.start_install(str(body.get("id") or ""),
+                                                             dir_override=str(body.get("dir") or "")))
+            if route == "/api/local-modules/cancel":
+                body = self._body_json()
+                return self._json(local_modules.cancel_install(str(body.get("id") or "")))
+            if route == "/api/update":
+                return self._json(local_update.do_update())
+            if route == "/api/local-modules/uninstall":
+                body = self._body_json()
+                return self._json(local_modules.uninstall(str(body.get("id") or "")))
             if route == "/api/voices/delete":
                 body = self._body_json()
                 return self._json({"ok": True, **flows.delete_voice(
@@ -459,13 +505,14 @@ class Handler(BaseHTTPRequestHandler):
                 result = flows.synthesize(
                     str(body.get("text") or ""),
                     str(body.get("voice") or ""),
-                    {"rate": float(body.get("rate") or 1.0)})
+                    {"rate": float(body.get("rate") or 1.0),
+                     "emotion": str(body.get("emotion") or "")})
                 result["url"] = "/api/preview-file?name=" + urllib.parse.quote(result["file"])
                 return self._json({"ok": True, **result})
             if route == "/api/tts":
                 body = self._body_json()
                 opts = {}
-                for key in ("format", "sample_rate", "rate", "pitch", "volume"):
+                for key in ("format", "sample_rate", "rate", "pitch", "volume", "emotion"):
                     if body.get(key) not in (None, ""):
                         opts[key] = body[key]
                 result = flows.synthesize(

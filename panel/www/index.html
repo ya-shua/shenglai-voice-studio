@@ -11,10 +11,10 @@
 <aside id="side">
   <div class="brand"><span class="blogo">🎙️</span><div><b>声来</b><span class="bsub">一句话，一个声音，一首歌</span></div></div>
   <nav id="side-nav">
-    <button data-task="hall" class="active" type="button">🎧 免费音色</button>
-    <button data-task="speak" type="button">🗣️ 说话</button>
-    <button data-task="create" type="button">✨ 造声音</button>
+    <button data-task="overview" class="active" type="button">📊 总览</button>
     <button data-task="mine" type="button">🗂️ 我的音色</button>
+    <button data-task="hall" type="button">🎧 免费音色</button>
+    <button data-task="create" type="button">✨ 自由造音</button>
     <button data-task="cover" type="button">🎵 翻唱</button>
     <button data-task="settings" type="button">⚙️ 模型接入</button>
   </nav>
@@ -40,7 +40,7 @@
 
   <!-- 🎧 音色大厅（默认页） -->
   <section id="task-hall" class="task active">
-    <p class="pageintro">各模型的官方免费音色，挑一个选中、输入文字直接试听——<b>微软 Edge 与小米 MiMo 完全免费</b>，喜欢的点「用她说话」录进音色库。</p>
+    <p class="pageintro"><b>试听 = 官方样音录音</b>（免费零 Key）；<b>发语音 = 实时合成</b>，用该音色所属模型的 Key（小米 MiMo 免费 / 阿里百炼几厘钱一句）——<b>声音是各家的资产，MiMo 的 Key 只能发 MiMo 的音色</b>。选中 → 「用她说话」登记并设为 TTS 输出；Key 行不行看徽标，模型接入页可一键「测试」。</p>
     <div class="row">
       <label>模型<select id="hall-model"></select></label>
       <label>性别<select id="hall-gender"><option value="">全部性别</option><option value="女声">女声</option><option value="男声">男声</option></select></label>
@@ -51,37 +51,30 @@
       <span class="avatar" id="hall-sel-avatar" style="width:34px;height:34px;font-size:15px">?</span>
       <div class="pv-name"><b id="hall-sel-name">未选择</b><div class="dim" id="hall-sel-src">点下方卡片选中一个音色</div></div>
       <label class="inline-field">风格<select id="hall-style"><option value="">全部风格</option></select></label>
+      <audio id="hall-player" controls class="player hidden"></audio>
       <button id="hall-run" class="playbtn" type="button" title="试听">▶</button>
+      <select id="hall-cc-target" class="hidden" style="width:auto;min-width:110px;margin:0"></select>
+      <button id="hall-cc-run" class="mini hidden" type="button" title="把选中的音色样音当素材，复刻到目标平台">跨平台复刻 →</button>
     </div>
     <div class="hall-textrow">
-      <input id="hall-text" value="你好，很高兴认识你，希望我的声音能陪你度过愉快的一天。" placeholder="输入试听文字（≤100字）">
+      <textarea id="hall-text" rows="2" placeholder="输入文字（≤100字试听秒开；点音色卡即用这段文字自动试听）">你好，很高兴认识你，希望我的声音能陪你度过愉快的一天。</textarea>
     </div>
+        <div class="row four hall-params">
+          <label>情绪<select id="tts-emotion"><option value="默认">默认</option><option>开心</option><option>兴奋</option><option>温柔</option><option>生气</option><option>委屈</option><option>难过</option><option>撒娇</option><option>困倦</option><option>得意</option></select></label>
+          <label>语速<input id="tts-rate" type="number" step="0.05" min="0.5" max="2" value="1"></label>
+          <label>音调<input id="tts-pitch" type="number" step="0.05" min="0.5" max="2" value="1"></label>
+          <label>音量<input id="tts-volume" type="number" min="0" max="100" value="50"></label>
+          <label>格式<select id="tts-format"><option value="wav">wav</option><option value="mp3">mp3</option></select></label>
+        </div>
+    <div class="hall-synthrow">
+      <button id="tts-run" class="primary">▶ 合成正式版</button>
+      <span class="hint">试听＝点音色卡（缓存秒开）；合成＝用顶栏「当前音色」出正式文件，不限制字数，克隆音色也能用。Ctrl+Enter 快速合成。</span>
+    </div>
+    <div id="tts-result" class="result hidden"></div>
+    <audio id="tts-player" controls class="player hidden"></audio>
     <div id="hall-grid" class="voicegrid"></div>
-    <audio id="hall-player" controls class="player hidden"></audio>
-  </section>
-
-  <!-- 🗣️ 说话 -->
-  <section id="task-speak" class="task" hidden>
-    <p class="pageintro">用选定的音色把文字读出来——支持语速、音调、音量微调，Ctrl+Enter 快速合成。</p>
-    <div class="card" id="speak-pointer" hidden>
-      <p class="hint">还没有音色——去「🎧 音色大厅」挑一个免费的，或「✨ 造声音」做一个。</p>
-      <button class="primary" data-gohall="1" type="button">去大厅挑一个</button>
-    </div>
-    <div class="card" id="speak-main" hidden>
-      <h3>用「<span id="sp-voice-label">—</span>」说话</h3>
-      <label>文本<textarea id="tts-text" rows="5">你好，欢迎来到声来。</textarea></label>
-      <div class="row four">
-        <label>语速<input id="tts-rate" type="number" step="0.05" min="0.5" max="2" value="1"></label>
-        <label>音调<input id="tts-pitch" type="number" step="0.05" min="0.5" max="2" value="1"></label>
-        <label>音量<input id="tts-volume" type="number" min="0" max="100" value="50"></label>
-        <label>格式<select id="tts-format"><option value="wav">wav</option><option value="mp3">mp3</option></select></label>
-      </div>
-      <button id="tts-run" class="primary">▶ 合成</button>
-      <div id="tts-result" class="result hidden"></div>
-      <audio id="tts-player" controls class="player hidden"></audio>
-    </div>
-    <div class="card">
-      <h3>产出记录 <button id="out-refresh" class="mini" type="button">刷新</button></h3>
+    <div class="card hall-outputs">
+      <h3>我的音频 <span class="dim">（最新在上，超过 20 条自动变滚轮）</span><button id="out-refresh" class="mini" type="button">刷新</button></h3>
       <ul id="outputs" class="filelist"></ul>
     </div>
   </section>
@@ -90,9 +83,9 @@
   <section id="task-create" class="task" hidden>
     <p class="pageintro">三种方式获得专属音色。需要 Key 时自动弹引导，只填一家，做完自动设为当前音色。</p>
     <div class="wizintents">
-      <button class="wizintent active" data-intent="design" type="button">✨ 描述生成<span>一句话描述，直接造出音色</span></button>
-      <button class="wizintent" data-intent="clone" type="button">🎙️ 音频克隆<span>一段音频，立刻开口说话</span></button>
-      <button class="wizintent" data-intent="pick" type="button">📚 登记已有<span>已有 voice_id / 模型 ID</span></button>
+      <button class="wizintent active" data-intent="design" type="button">✨ 描述生成<span>一句话描述直接造——用小米 MiMo Key（限时免费），填一次即可</span></button>
+      <button class="wizintent" data-intent="clone" type="button">🎙️ 音频克隆<span>丢一段音频克隆——用哪个 Key 取决于下面选的注册来源</span></button>
+      <button class="wizintent" data-intent="pick" type="button">📚 登记已有<span>已有 voice_id 直接登记——不需要 Key</span></button>
     </div>
 
     <div id="wiz-design">
@@ -153,43 +146,67 @@
   </section>
 
   <!-- 🗂️ 我的音色 -->
+  <!-- 📊 总览 -->
+  <section id="task-overview" class="task" hidden>
+    <p class="pageintro">一眼看清：声音库、引擎状态、平台接入、用量统计。</p>
+    <div class="card">
+      <h3>📊 用量统计 <span class="dim">——本面板的合成记录；真实账单以各平台控制台为准</span></h3>
+      <div id="usage-head" class="usage-head"></div>
+      <div id="usage-chart" class="usage-chart"></div>
+      <div id="usage-days" class="usage-days"></div>
+      <div class="hint" id="usage-note"></div>
+    </div>
+    <div class="card">
+      <h3>🗂️ 声音资产</h3>
+      <div id="ov-assets" class="hint">加载中…</div>
+    </div>
+    <div class="card">
+      <h3>⚙️ 引擎与平台状态</h3>
+      <div id="ov-engines" class="hint">加载中…</div>
+      <div id="ov-platforms" style="margin-top:10px"></div>
+    </div>
+  </section>
+
   <section id="task-mine" class="task" hidden>
-    <p class="pageintro">你的音色库——「去说话」直接合成；素材补全作用于选中的音色，模型生成的素材天然满足克隆要求。</p>
+    <p class="pageintro">音色库总览：🟢 当前音色 = 发语音时用的声音。「去说话」→ 大厅合成；下面的素材区是给音色「喂样本」用的。</p>
     <div class="card" id="home-list">
       <h3>音色库 <span class="dim" id="mine-count"></span></h3>
       <div id="voice-list" class="voicegrid"></div>
     </div>
     <div class="card">
-      <h3>「<span id="mt-voice-label">—</span>」的素材 <span id="mt-count" class="dim"></span></h3>
+      <h3>📦 「<span id="mt-voice-label">—</span>」的素材 <span id="mt-count" class="dim"></span></h3>
+      <p class="hint">素材 = 这个声音的<b>样本录音</b>。用途只有一个：<b>克隆注册</b>——凑够 ≥10 秒干净素材，就能把它克隆成百炼/硅基等平台的正式音色。下面两个卡片就是补素材的两种方式。</p>
       <ul id="mat-list" class="filelist"></ul>
-      <p class="hint">克隆正式音色需要 ≥10 秒干净素材。凑够后一键注册。</p>
-      <div class="row">
-        <label>&nbsp;<button id="mt-enroll" class="primary" style="width:100%" type="button">✅ 用这些素材注册正式音色</button></label>
-        <label>注册到<select id="mt-enroll-provider">
-          <option value="bailian">百炼 CosyVoice（复刻免费）</option>
-          <option value="fish">Fish Audio</option>
-          <option value="siliconflow">硅基流动</option>
-          <option value="elevenlabs">ElevenLabs</option>
-        </select></label>
-      </div>
-      <div id="mt-enroll-result" class="result hidden"></div>
     </div>
     <div class="card">
-      <h3>🧬 AI 补全素材</h3>
-      <div class="row">
+      <h3>🧬 方式一：AI 补素材<span class="dim">——挑一个能说话的音色把稿子读出来，自动存为素材</span></h3>
+      <div class="mine-row">
         <label>用什么声音读（源音色）<select id="gm-source"></select></label>
-        <label>&nbsp;<button id="gm-auto" class="primary" style="width:100%" type="button">⚡ 一键补 3 条</button></label>
+        <label><span class="cap">自动生成并入库</span><button id="gm-auto" class="primary" style="width:100%" type="button">⚡ 一键补 3 条</button></label>
       </div>
       <label>自定义生成文本<textarea id="gm-text" rows="2" placeholder="留空则用内置口播稿；50~80 字 ≈ 15~20 秒"></textarea></label>
       <button id="gm-run" class="primary" type="button">生成 1 条自定义素材</button>
     </div>
     <div class="card">
-      <h3>上传素材</h3>
+      <h3>📁 方式二：上传素材<span class="dim">——已有这个人（或这段声音）的录音就直接传</span></h3>
       <div id="drop" class="dropzone">
         <p>把音频文件拖到这里（存入当前音色名下）</p>
         <input id="mat-file" type="file" accept=".wav,.mp3,.m4a,.flac,.ogg,.opus,.aac" multiple>
       </div>
     </div>
+    <details class="card cover-guide">
+      <summary>⬆️ 进阶：把这些素材注册成其它平台的正式音色<span class="dim">（百炼复刻免费；适合想要更稳的云端音色时用）</span></summary>
+      <div class="mine-row" style="margin-top:10px">
+        <label><span class="cap">注册到</span><select id="mt-enroll-provider">
+          <option value="bailian">百炼 CosyVoice（复刻免费）</option>
+          <option value="fish">Fish Audio</option>
+          <option value="siliconflow">硅基流动</option>
+          <option value="elevenlabs">ElevenLabs</option>
+        </select></label>
+        <label><span class="cap">确认素材 ≥10 秒后</span><button id="mt-enroll" class="primary" style="width:100%" type="button">✅ 用这些素材注册正式音色</button></label>
+      </div>
+      <div id="mt-enroll-result" class="result hidden"></div>
+    </details>
   </section>
 
   <!-- 🎵 翻唱 -->
@@ -197,40 +214,38 @@
     <p class="pageintro">整曲翻唱：自动「人声/伴奏分离 → 只换人声 → 混回伴奏」，伴奏全程不动，稳定关键。</p>
     <div class="card">
       <h3>🎵 稳定翻唱 <span class="tag">多素材音色</span></h3>
-      <div id="cover-check" class="hint">检查中…</div>
+      <div id="cover-check" class="cover-status">检查中…</div>
       <div id="cover-form" class="hidden">
-        <div class="row">
-          <label>引擎<select id="sc-engine">
+        <div class="cover-grid">
+          <label class="span4"><span class="cap">歌手音色</span><select id="sc-voice"></select></label>
+          <label class="span2"><span class="cap">引擎<button id="sc-reload" class="mini" type="button">刷新</button></span><select id="sc-engine">
             <option value="local-svc">本地 Seed-VC（免费）</option>
             <option value="kits">Kits.AI（付费）</option>
           </select></label>
-          <label>歌手音色<select id="sc-voice"></select>
-            <button id="sc-reload" class="mini" type="button">刷新</button>
-          </label>
+          <label class="span2">模式<select id="sc-mode"><option value="sing">整曲翻唱</option><option value="convert">清唱 / 干声换声</option></select></label>
+          <label class="span4">歌曲 / 干声文件<input id="sc-file" type="file" accept=".wav,.mp3,.flac,.webm"></label>
         </div>
-        <div class="row">
-          <label>模式<select id="sc-mode"><option value="sing">整曲翻唱（分离→换声→混回伴奏）</option><option value="convert">清唱/干声换声</option></select></label>
-        </div>
-        <label>歌曲 / 干声文件<input id="sc-file" type="file" accept=".wav,.mp3,.flac,.webm"></label>
-        <div class="row four">
+        <div class="cover-adv">
+          <span class="adv-cap">高级</span>
           <label>转换强度<input id="sc-strength" type="number" step="0.05" min="0" max="1" value="0.8"></label>
-          <label>音高偏移(半音)<input id="sc-pitch" type="number" step="1" min="-24" max="24" value="0"></label>
-          <label>&nbsp;<button id="sc-run" class="primary" style="width:100%" type="button">🎤 开始翻唱</button></label>
+          <label>音高偏移（半音）<input id="sc-pitch" type="number" step="1" min="-24" max="24" value="0"></label>
         </div>
+        <button id="sc-run" class="primary cover-run" type="button">🎤 开始翻唱</button>
         <div id="sc-progress" class="hint"></div>
         <div id="sc-result" class="result hidden"></div>
         <audio id="sc-player" controls class="player hidden"></audio>
       </div>
     </div>
-    <div class="card">
-      <h3>怎么得到「歌手音色」</h3>
+    <details class="card cover-guide">
+      <summary>怎么得到「歌手音色」</summary>
       <ol class="guide" style="padding-left:18px;margin:8px 0 0">
-        <li>在 <b>kits.ai</b> 订阅并用<b>多段唱歌素材</b>（干净干声 ≥10 分钟最稳）训练专属音色模型</li>
-        <li>「＋ 造个声音 → 登记已有」→ 来源选 Kits.AI → 拉取目录登记</li>
-        <li>回这里：丢一首歌进去 → 自动分离、只换人声、混回伴奏</li>
-        <li>音域不合调音高偏移（男转女 +4~+7）；强度 0.7~0.85 兼顾音色与咬字</li>
+        <li><b>免费路线（推荐，无需素材训练）</b>：大厅挑音色或自由造音做一个 → 直接用本地 Seed-VC 翻唱，她是你的音色她就唱</li>
+        <li>想让她唱得更像本尊：在 kits.ai 订阅并用<b>多段唱歌素材</b>（干净干声 ≥10 分钟最稳）训练专属音色模型</li>
+        <li>「自由造音 → 登记已有」→ 来源选 Kits.AI → 拉取目录登记</li>
+        <li>克隆音色想更贴本尊：「🗂️ 我的音色」→ 选她 → <b>AI 一键补素材</b> → 用新素材重新克隆注册</li>
+        <li>回这里：丢一首歌进去 → 自动分离、只换人声、混回伴奏；音域不合调音高偏移（男转女 +4~+7），强度 0.7~0.85</li>
       </ol>
-    </div>
+    </details>
   </section>
 
   <!-- ⚙️ 模型接入 -->
@@ -253,6 +268,10 @@
         <div id="am-custom" hidden><div id="custom-form"></div></div>
       </div>
     </div>
+    <div class="card">
+      <h3>本地引擎（翻唱）<span class="dim">——跑在你自己电脑上，断网可用，零 Key</span></h3>
+      <div id="local-modules"></div>
+    </div>
   </section>
 
   <!-- ❔ 指南 -->
@@ -261,21 +280,27 @@
     <div class="card">
       <h3>使用指南</h3>
       <div class="guide">
-        <h4>声音从哪来</h4>
+        <h4>三步出声</h4>
         <ul>
-          <li><b>🎧 音色大厅</b>：免费音色直接挑、试听、登记（零 Key 玩转 Edge 与 MiMo）</li>
-          <li><b>✨ 造声音</b>：一句话描述生成 / 一段音频克隆 / 手动登记</li>
-          <li><b>🧬 素材补全</b>：在我的音色页一键补 3 条，凑够 ≥10 秒注册正式音色</li>
+          <li><b>① 挑声音</b>：🎧 免费音色大厅——试听免费零 Key，点卡片即听；喜欢就点「用她说话」登记并设为 TTS 输出</li>
+          <li><b>② 造专属</b>：✨ 自由造音——一句话描述生成（小米 MiMo Key，限时免费）/ 一段音频克隆（用所选来源的 Key）/ 已有 voice_id 直接登记</li>
+          <li><b>③ 开口</b>：大厅选好文字（可选情绪/语速）→「▶ 合成正式版」出文件；QQ 等外部框架走 <code>/api/speak</code> 拉取即发</li>
         </ul>
-        <h4>怎么用</h4>
+        <h4>用哪个 Key</h4>
         <ul>
-          <li><b>🗣️ 说话</b>：选当前音色，打字合成，Ctrl+Enter 快捷</li>
-          <li><b>🎵 翻唱</b>：kits.ai 训练歌手音色后登记，丢歌进去出成品</li>
+          <li>试听：免费零 Key（官方样音）；MiMo 音色合成用 MiMo Key（免费）</li>
+          <li>发语音：<b>该音色所属模型的 Key</b>——百炼几厘钱/句；Key 行不行去「模型接入 → 测试」一点即知</li>
+          <li>翻唱（本地 Seed-VC）：<b>不需要 Key</b>，本机推理</li>
         </ul>
-        <h4>费用</h4>
+        <h4>让她唱歌</h4>
         <ul>
-          <li>微软 Edge / MiMo TTS：<b>免费</b>；百炼复刻免费、合成几厘钱/句</li>
-          <li>Fish 有免费层；Kits.AI 订阅制（翻唱额度内使用）</li>
+          <li><b>🎵 翻唱</b>：免费路线 = 登记好的音色 + 本地 Seed-VC，丢歌进去自动「分离 → 换人声 → 混回伴奏」</li>
+          <li>更贴本尊：kits.ai 用多段唱歌素材训练后「自由造音 → 登记已有」；克隆音色先在「我的音色 → AI 一键补素材」再重新克隆</li>
+        </ul>
+        <h4>带情绪说话</h4>
+        <ul>
+          <li>大厅「情绪」下拉选开心/生气/撒娇… → 合成自动带语速、音调、音量波动（MiMo 音色还有原生语气）</li>
+          <li>外部框架/情绪插件：<code>/api/speak?…&amp;emotion=开心</code> 传一个词即可</li>
         </ul>
       </div>
     </div>
@@ -291,6 +316,11 @@
   </div>
 </div>
 <div id="toast" class="toast hidden"></div>
+<div id="update-banner" class="update-banner hidden">
+  <span id="update-text">🚀 发现新版本</span>
+  <button id="update-go" class="mini primary" type="button">一键更新</button>
+  <button id="update-skip" class="mini" type="button" title="本次不再提示">×</button>
+</div>
 <script src="/app.js"></script>
 </body>
 </html>

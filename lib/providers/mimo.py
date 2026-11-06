@@ -19,7 +19,7 @@ import base64
 import json
 import uuid
 
-from lib.providers.base import Provider, ProviderError, http_send
+from lib.providers.base import Provider, ProviderError, audio_data_uri, http_send
 
 # 文字设计出来的音色没有云端 voice_id，用这个前缀标记，合成时按原描述重新演绎
 DESIGN_PREFIX = "mimo-design:"
@@ -150,6 +150,15 @@ class MiMoProvider(Provider):
             cfg: dict, voice_meta: dict | None = None):
         self.validate_config(cfg)
         vid = str(voice_id or "")
+        # 跨平台复刻音色：voice_id = mimo-ref:*，参考素材存在 voice_meta.reference_path
+        if vid.startswith("mimo-ref:"):
+            from pathlib import Path as _P
+            ref = str((voice_meta or {}).get("reference_path") or "").strip()
+            if not ref or not _P(ref).is_file():
+                raise ProviderError("这个跨平台复刻音色缺参考素材，无法合成；请重新复刻一次")
+            ref_uri = audio_data_uri(_P(ref).read_bytes(), _P(ref).suffix.lstrip("."))
+            data = self.synthesize_mode("clone", text, ref_data_uri=ref_uri, cfg=cfg)
+            return data, "wav"
         # 文字设计出来的音色没有云端 ID：每次按存下来的描述重新演绎
         if vid.startswith(DESIGN_PREFIX):
             prompt = str((voice_meta or {}).get("design_prompt") or "").strip()
@@ -162,3 +171,8 @@ class MiMoProvider(Provider):
             voice=vid or "mimo_default", cfg=cfg,
         )
         return data, "wav"
+
+    def verify_key(self, cfg: dict) -> None:
+        """MiMo 限时免费：直接用一个内置音色合成两个字验证，零成本。"""
+        self.validate_config(cfg)
+        self.tts("你好", "mimo_default", "", {}, cfg)
