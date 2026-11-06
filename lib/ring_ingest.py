@@ -11,7 +11,9 @@ SHENGLAI_RING_OFF=1 可整体关闭。环形的心路径按候选表自动找，
 from __future__ import annotations
 
 import json
+import glob
 import os
+import shutil
 import subprocess
 import sys
 import threading
@@ -35,11 +37,15 @@ def _server_path() -> str | None:
 
 
 def _node_exe() -> str:
-    """node.exe：先用 SnowLuma 自带的（它不在全局 PATH），找不到再赌 PATH。"""
-    for p in ("D:/AI/QQ大肥鱼/SnowLuma/node.exe", "D:/AI/QQ大肥鱼/SnowLuma/node.exe".replace("/", "\\")):
+    """node.exe：环境变量优先 → SnowLuma 自带（通配扫描，不在仓库里写本机路径）→ PATH。"""
+    env = os.environ.get("SHENGLAI_NODE")
+    if env and os.path.isfile(env):
+        return env
+    for p in glob.glob("D:/AI/*/SnowLuma/node.exe") + glob.glob("D:/AI/Models/*/node.exe"):
         if os.path.isfile(p):
             return p
-    return "node"
+    which = shutil.which("node")
+    return which or "node"
 
 
 def notify(content: str, points: list[str] | None = None,
