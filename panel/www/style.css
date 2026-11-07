@@ -138,10 +138,18 @@ label .cap .mini { margin: 0 0 2px; }
 .lm-bar-in { height: 100%; background: var(--accent); border-radius: 999px; transition: width .4s; }
 .lm-bar-in.err { background: #b05a5a; }
 
-/* 翻唱引擎切换胶囊：可点击，当前高亮 */
-.statuschip.enginechip { cursor: pointer; transition: border-color .12s, color .12s; }
-.statuschip.enginechip:hover { border-color: var(--accent); color: var(--text); }
-.statuschip.eng-cur { border-color: var(--accent); color: var(--text); background: rgba(79, 140, 255, .14); }
+/* 翻唱引擎切换胶囊：大号可点击切换卡，当前高亮 */
+#cover-check .statuschip.enginechip {
+  cursor: pointer; font-size: 14px; padding: 13px 18px;
+  border-radius: 12px; gap: 8px; flex: 1 1 0; justify-content: center;
+  transition: border-color .12s, color .12s, background .12s;
+}
+#cover-check .statuschip.enginechip:hover { border-color: var(--accent); color: var(--text); background: rgba(79,140,255,.08); }
+#cover-check .statuschip.enginechip.eng-cur {
+  border-color: var(--accent); color: var(--text);
+  background: rgba(79, 140, 255, .16); border-width: 2px;
+  box-shadow: 0 0 14px rgba(79, 140, 255, .25);
+}
 
 /* ---- 翻唱页 ---- */
 .cover-status { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 14px; }

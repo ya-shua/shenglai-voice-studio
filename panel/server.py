@@ -506,13 +506,14 @@ class Handler(BaseHTTPRequestHandler):
                     str(body.get("text") or ""),
                     str(body.get("voice") or ""),
                     {"rate": float(body.get("rate") or 1.0),
-                     "emotion": str(body.get("emotion") or "")})
+                     "emotion": str(body.get("emotion") or ""),
+                     "mood": str(body.get("mood") or "")})
                 result["url"] = "/api/preview-file?name=" + urllib.parse.quote(result["file"])
                 return self._json({"ok": True, **result})
             if route == "/api/tts":
                 body = self._body_json()
                 opts = {}
-                for key in ("format", "sample_rate", "rate", "pitch", "volume", "emotion"):
+                for key in ("format", "sample_rate", "rate", "pitch", "volume", "emotion", "mood"):
                     if body.get(key) not in (None, ""):
                         opts[key] = body[key]
                 result = flows.synthesize(

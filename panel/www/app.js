@@ -476,7 +476,8 @@ async function runTTS() {
   const payload = {
     text: $("#hall-text").value,
     voice_name: v.name,
-    emotion: ($("#tts-emotion") || {}).value || "默认",
+    emotion: (() => { const v = ($("#tts-emotion") || {}).value || "默认"; return v.startsWith("mood:") ? v.slice(5) : v; })(),
+    mood: (() => { const v = ($("#tts-emotion") || {}).value || ""; return v.startsWith("mood:") ? v.slice(5) : ""; })(),
     rate: parseFloat($("#tts-rate").value) || 1.0,
     pitch: parseFloat($("#tts-pitch").value) || 1.0,
     volume: parseInt($("#tts-volume").value, 10) || 50,

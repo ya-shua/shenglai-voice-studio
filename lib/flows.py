@@ -683,6 +683,55 @@ def apply_emotion(opts: dict, emotion: str) -> dict:
     return opts
 
 
+TIDE_ROOT = ""  # tide 心情引擎目录：SHENGLAI_TIDE 环境变量优先，否则自动扫描 D:/AI/*/tide
+
+
+def _tide_voice() -> dict:
+    """读 tide 心情引擎的当前状态 → TTS 参数（rate/pitch/style）。
+
+    tide 的七情账户+小标签+强度在引擎内持续演化（懒 tick），这里只读现值。
+    出参：speed → rate；半音 pitch → 声来的乘数 pitch（2^(半音/12)）；
+    instruct（语气描述）作为 style 传给 MiMo 这类支持语气的引擎。
+    tide 不可用/崩了 → 返回空 dict，安全降级为默认参数。
+    """
+    try:
+        import os as _os
+        import sys as _sys
+        import glob as _glob
+        root = _os.environ.get("SHENGLAI_TIDE") or TIDE_ROOT
+        if not root or not _os.path.isdir(_os.path.join(root, "tide")):
+            for cand in _glob.glob("D:/AI/*/tide"):
+                if _os.path.isfile(_os.path.join(cand, "tide", "core.py")):
+                    root = cand
+                    break
+        if not root or not _os.path.isdir(root):
+            return {}
+        if root not in _sys.path:
+            _sys.path.insert(0, root)
+        from tide import core, yaml_mini  # noqa: E402
+
+        cfg = {}
+        for name in ("character", "rules", "emotion"):
+            try:
+                cfg.update(yaml_mini.loads(
+                    (Path(root) / "config" / (name + ".yaml")).read_text(encoding="utf-8")
+                ) or {})
+            except Exception:
+                pass
+        tc = core.TideCore(cfg, state_path=str(Path(root) / "data" / "state.json"))
+        tc.tick(time.time())
+        v = (tc.plan_reply().get("voice") or {})
+        semis = float(v.get("pitch") or 0)
+        return {
+            "rate": round(float(v.get("speed") or 1.0), 3),
+            "pitch": round(2.0 ** (semis / 12.0), 3),
+            "style": str(v.get("instruct") or ""),
+            "label": str(getattr(tc.emotion, "label", "") or ""),
+        }
+    except Exception:
+        return {}
+
+
 def synthesize(text: str, voice_name: str, opts: dict | None = None) -> dict:
     """用已注册音色合成语音，产出文件写入 outputs/ 并返回路径。"""
     if not (text or "").strip():
@@ -699,7 +748,17 @@ def synthesize(text: str, voice_name: str, opts: dict | None = None) -> dict:
         raise ProviderError(f"{provider.display_name} 不支持语音合成")
     opts = dict(opts or {})
     emotion = str(opts.pop("emotion", "") or "").strip()
-    if emotion and emotion != "默认":
+    mood = str(opts.pop("mood", "") or "").strip()
+    if mood == "tide":
+        # tide 心情联动：语速/音调/语气全部来自 tide 当前心情（优先于 emotion）
+        tv = _tide_voice()
+        if tv.get("rate"):
+            opts["rate"] = tv["rate"]
+        if tv.get("pitch"):
+            opts["pitch"] = tv["pitch"]
+        if tv.get("style"):
+            opts["style"] = tv["style"]
+    elif emotion and emotion != "默认":
         opts = apply_emotion(opts, emotion)
     data, ext = provider.tts(
         text,

@@ -9,6 +9,19 @@
 
 ---
 
+## [1.8.1] - 2026-11-07
+
+### 新增（tide 心情引擎联动）
+- **`/api/speak`、`/api/tts`、MCP `voice_tts`、面板情绪下拉** 全部支持 `mood=tide`：语速/音调/语气全部跟随 tide 心情引擎的实时情绪（七情账户+小标签+强度，比固定情绪词更细腻）；tide 不可用时安全降级
+- tide 语气描述（instruct）作为 style 传给 MiMo（chat 式引擎原生吃语气），情绪表现力最强
+- 文档：`docs/情绪联动.md`（三种插件形态的对接指南）
+
+### 隐私
+- `lib/ring_ingest.py` 移除本机路径中的 QQ 目录名——改为**通配扫描**（`D:/AI/*/SnowLuma/node.exe` + 环境变量 + PATH），本机功能不受影响，仓库无隐私字样
+
+### 运维
+- 收录 `scripts/push_by_api.py`（github.com:443 被墙时的 API 推送脚本，PAT 路径走参数不进仓库）
+
 ## [1.8.0] - 2026-11-07
 
 ### 新增（海螺 MiniMax 接入完善）

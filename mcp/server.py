@@ -137,7 +137,7 @@ def tool_register_manual(args: dict) -> str:
 
 def tool_tts(args: dict) -> str:
     opts = {}
-    for key in ("format", "sample_rate", "rate", "pitch", "volume"):
+    for key in ("format", "sample_rate", "rate", "pitch", "volume", "emotion", "mood"):
         if args.get(key) is not None:
             opts[key] = args[key]
     result = flows.synthesize(args.get("text") or "", args.get("voice_name") or "", opts)
@@ -508,12 +508,14 @@ TOOLS = [
     },
     {
         "name": "voice_tts",
-        "description": "用已注册音色把文本合成为语音，产出 wav/mp3 文件并返回路径。调试参数：rate 语速 0.5~2.0、pitch 音调 0.5~2.0、volume 音量 0~100。",
+        "description": "用已注册音色把文本合成为语音，产出 wav/mp3 文件并返回路径。调试参数：rate 语速 0.5~2.0、pitch 音调 0.5~2.0、volume 音量 0~100、emotion 情绪（让声音带上情绪波动）。",
         "inputSchema": {
             "type": "object",
             "properties": {
                 "text": {"type": "string", "description": "要合成的文本"},
                 "voice_name": {"type": "string", "description": "已注册的音色名"},
+                "emotion": {"type": "string", "enum": ["默认", "开心", "兴奋", "温柔", "生气", "委屈", "难过", "撒娇", "困倦", "得意"], "description": "情绪：自动折算语速/音调/音量，MiMo 音色还带原生语气。默认 默认"},
+                "mood": {"type": "string", "enum": ["", "tide"], "description": "mood=tide：忽略 emotion，语速/音调/语气全部跟随 tide 心情引擎的实时情绪（更细腻）"},
                 "format": {"type": "string", "enum": ["wav", "mp3"], "description": "默认 wav"},
                 "sample_rate": {"type": "integer", "description": "默认 24000"},
                 "rate": {"type": "number", "description": "语速 0.5~2.0，默认 1.0"},
