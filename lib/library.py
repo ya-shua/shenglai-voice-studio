@@ -161,6 +161,57 @@ def remove_voice(name: str) -> bool:
     return len(reg["voices"]) < before
 
 
+def rename_voice(old_name: str, new_name: str) -> dict:
+    """改名：注册表条目 + 素材目录 + 当前音色引用一起改。"""
+    old_name = sanitize_name(old_name)
+    new_name = sanitize_name(new_name)
+    if not new_name or new_name == old_name:
+        raise ValueError("新名字无效或与原名相同")
+    reg = load_registry()
+    target = next((v for v in reg["voices"] if v["name"] == old_name), None)
+    if target is None:
+        raise FileNotFoundError(f"音色「{old_name}」不存在")
+    if any(v["name"] == new_name for v in reg["voices"]):
+        raise ValueError(f"音色名「{new_name}」已被占用")
+    target["name"] = new_name
+    # 素材目录跟着改名（存在才动）
+    old_dir = config.data_root() / "materials" / old_name
+    new_dir = config.data_root() / "materials" / new_name
+    if old_dir.is_dir():
+        if new_dir.exists():
+            raise ValueError(f"素材目录「{new_name}」已存在，改名中止")
+        old_dir.rename(new_dir)
+        # reference_path 指向旧素材目录时，同步改到新目录，否则改名后参考音频路径失效
+        ref = target.get("reference_path")
+        if ref:
+            try:
+                rp = Path(str(ref))
+                if old_dir.resolve() in rp.resolve().parents:
+                    target["reference_path"] = str(new_dir / rp.relative_to(old_dir))
+            except (OSError, ValueError):
+                pass
+    # 当前音色引用同步
+    if reg.get("current") == old_name:
+        reg["current"] = new_name
+    save_registry(reg)
+    return target
+
+
+def set_sing_ready(name: str, ready: bool) -> dict:
+    """切换「可唱歌」标记：经过训练、不破音电音后打上。"""
+    name = sanitize_name(name)
+    reg = load_registry()
+    target = next((v for v in reg["voices"] if v["name"] == name), None)
+    if target is None:
+        raise FileNotFoundError(f"音色「{name}」不存在")
+    if ready:
+        target["sing_ready"] = True
+    else:
+        target.pop("sing_ready", None)
+    save_registry(reg)
+    return target
+
+
 def list_voices() -> list[dict]:
     return load_registry()["voices"]
 

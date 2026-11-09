@@ -40,12 +40,6 @@ const $$ = (sel) => Array.from(document.querySelectorAll(sel));
 
 const state = { current: "", voices: [], status: null };
 
-const AUTO_TEXTS = [
-  "大家好，我是小美。今天天气不错，我们出门走走，顺便买一杯冰美式，晚上再一起看一场电影。",
-  "生活就是这样，平凡的日子里也藏着小惊喜。记得多喝水，早点休息，明天又是元气满满的一天。",
-  "如果问我最喜欢什么季节，那一定是秋天，风很温柔，天很高，走在路上连心情都变得开阔了。",
-];
-
 async function api(path, opts = {}) {
   const res = await fetch(path, opts);
   let data = null;
@@ -93,21 +87,13 @@ async function loadVoices() {
   for (const v of vRes.voices) if (!names.includes(v.name)) names.push(v.name);
   state.voices = names.map((n) => reg.get(n) || { name: n, provider: "", status: "素材待注册", materials: true });
 
-  const sel = $("#cur-voice");
   const usable = state.voices.filter((v) => v.status !== "failed");
-  sel.innerHTML = usable.map((v) => {
-    const tag = v.provider ? `（${v.provider}）` : "（素材待注册）";
-    return `<option value="${esc(v.name)}">${esc(v.name)} ${esc(tag)}</option>`;
-  }).join("") || `<option value="">（还没有音色，点「开始创建」）</option>`;
   if (!state.current || !usable.some((v) => v.name === state.current)) {
     let saved = "";
     try { saved = localStorage.getItem("shenglai.voice") || ""; } catch (err) {}
     state.current = (saved && usable.some((v) => v.name === saved)) ? saved : (usable.length ? usable[0].name : "");
-  } else {
-    sel.value = state.current;
   }
   if (state.current) {
-    sel.value = state.current;
     try { localStorage.setItem("shenglai.voice", state.current); } catch (err) {}
   }
   renderCurrent();
@@ -140,21 +126,51 @@ async function renderVoices() {
       return `
       <div class="voicecard${isCur ? " hall-selected" : ""}" data-name="${esc(v.name)}">
         <div class="vhead">
-          <span class="avatar" style="background:hsl(${hue},55%,42%)">${esc(initial)}</span>
-          <div><b>${esc(v.name)}</b> ${isCur ? '<span class="obadge tts">🟢 当前音色</span>' : `<span class="dim">${esc(v.status || "ready")}</span>`}</div>
+          <div class="vbadge-row">${isCur ? '<span class="obadge tts">🟢 当前音色</span>' : ""}</div>
+          <div class="vrow">
+            <span class="avatar" style="background:hsl(${hue},55%,42%)">${esc(initial)}</span>
+            <b class="vname">${esc(v.name)}</b>
+            <button class="mini" data-rename="${esc(v.name)}" type="button" title="改名">✏️</button>
+          </div>
         </div>
-        <div class="dim">${esc(v.provider || "待注册")} · ${esc(v.voice_id || "-")}</div>
-        <div class="dim">模型: ${esc(v.target_model || "默认")} · 素材 ${(v.materials || []).length} 个</div>
         <div class="actions">
-          ${isCur ? "" : `<button class="primary" data-setcur="${esc(v.name)}">设为当前</button>`}
-          <button data-try="${esc(v.name)}">去说话</button>
-          <button data-del="${esc(v.name)}">删除</button>
+          <button class="primary" data-apply="${esc(v.name)}" type="button">应用</button>
+          <button data-del="${esc(v.name)}" type="button">删除</button>
         </div>
       </div>`;
     }).join("");
-    box.querySelectorAll("[data-setcur]").forEach((b) =>
+    // 应用：正在改名→保存新名字；否则→设为当前音色
+    box.querySelectorAll("[data-apply]").forEach((b) =>
       b.addEventListener("click", async () => {
-        state.current = b.dataset.setcur;
+        const card = b.closest(".voicecard");
+        const oldName = b.dataset.apply;
+        const input = card.querySelector(".rename-input");
+        if (input) {
+          const to = input.value.trim();
+          if (!to || to === oldName) {
+            const cancel = card.querySelector(".rename-cancel");
+            if (cancel) cancel.click();
+            return;
+          }
+          b.disabled = true;
+          try {
+            await api("/api/voices/rename", {
+              method: "POST", headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ from: oldName, to }),
+            });
+            toast(`已改名为「${to}」`);
+            await loadVoices();
+          } catch (e) {
+            toast("改名失败: " + e.message, false);
+            b.disabled = false;
+          }
+          return;
+        }
+        if (state.current === oldName) {
+          toast("「" + oldName + "」已经是当前音色");
+          return;
+        }
+        state.current = oldName;
         try { localStorage.setItem("shenglai.voice", state.current); } catch (err) {}
         await api("/api/voices/current", {
           method: "POST", headers: { "Content-Type": "application/json" },
@@ -163,6 +179,35 @@ async function renderVoices() {
         renderVoices();
         renderCurrent();
         toast(`已启动「${state.current}」——发语音就用这个声音`);
+      })
+    );
+    // 改名：点 ✏️ 名字位置变成输入框（头像旁边，不撑高卡片），取消放右侧；保存走外面的「应用」或回车
+    box.querySelectorAll("[data-rename]").forEach((b) =>
+      b.addEventListener("click", () => {
+        const row = b.closest(".vrow");
+        const oldName = b.dataset.rename;
+        if (row.querySelector(".rename-input")) return;
+        const vname = row.querySelector(".vname");
+        const input = document.createElement("input");
+        input.type = "text"; input.className = "rename-input"; input.value = oldName;
+        const cancel = document.createElement("button");
+        cancel.className = "mini rename-cancel"; cancel.textContent = "取消"; cancel.type = "button";
+        vname.hidden = true; b.hidden = true;
+        row.insertBefore(input, b);
+        row.appendChild(cancel);
+        input.focus(); input.select();
+        const restore = () => {
+          input.remove(); cancel.remove();
+          vname.hidden = false; b.hidden = false;
+        };
+        cancel.addEventListener("click", restore);
+        input.addEventListener("keydown", (e) => {
+          if (e.key === "Enter") {
+            const apply = b.closest(".voicecard").querySelector("[data-apply]");
+            if (apply) apply.click();
+          }
+          if (e.key === "Escape") restore();
+        });
       })
     );
     box.querySelectorAll("[data-del], [data-delcloud]").forEach((b) =>
@@ -209,9 +254,9 @@ function renderCurrent() {
   set("#cur-wrap", !has);
   $("#btn-new").textContent = has ? "＋ 新建音色" : "开始创建";
   set("#home-list", !has);
-  $("#mt-voice-label").textContent = v ? v.name : "（未选择音色）";
+  const curBox = $("#cur-voice");
+  if (curBox) curBox.textContent = v ? `${v.name}（${v.provider || "素材待注册"}）` : "（还没有音色，点「开始创建」）";
   if (v) {
-    showMaterials();
     renderCoverVoices();
   }
 }
@@ -251,7 +296,7 @@ function switchTask(name) {
   if (title) title.textContent = PAGE_TITLES[name] || "声来";
   if (name === "hall") { loadHall().then(() => warmCurrent()); loadOutputs(); }
   if (name === "create") { renderVoices(); loadCloneModels(); }
-  if (name === "mine") { renderVoices(); showMaterials(); loadMaterialSourceVoices(); }
+  if (name === "mine") { renderVoices(); loadMineSettings(); loadMineHistory(); }
   if (name === "cover") loadCover();
   if (name === "overview") { renderUsage(); renderOverview(); }
   if (name === "settings") { renderProviderRows(); renderLocalModules(); }
@@ -556,157 +601,161 @@ function fmtDur(sec) {
   return m + ":" + String(s).padStart(2, "0");
 }
 
-/* ---------------- 🧬 素材 ---------------- */
+/* ---------------- 🎧 我的音色：卡片下方试听 ---------------- */
 
-async function showMaterials() {
+async function runMineAudition() {
   const v = currentVoice();
-  const ul = $("#mat-list");
-  const enrollBtn = $("#mt-enroll");
-  if (!v) {
-    ul.innerHTML = `<li class="dim">还没有音色：先去「🎧 发现」获得一个，素材会存在它的名下</li>`;
-    $("#mt-count").textContent = "";
-    enrollBtn.classList.add("hidden");
+  if (!v) return toast("还没有音色，先「＋新建音色」", false);
+  const btn = $("#mine-audition-btn");
+  const text = $("#mine-audition-text").value.trim();
+  if (!text) return toast("请填写要试听的内容", false);
+  busy(btn, true, "合成中…");
+  try {
+    const res = await api("/api/tts", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        text,
+        voice_name: v.name,
+        emotion: $("#mine-emotion").value || "默认",
+        rate: (parseInt($("#mine-rate").value, 10) || 100) / 100,
+        pitch: (parseInt($("#mine-pitch").value, 10) || 100) / 100,
+        volume: parseInt($("#mine-volume").value, 10) || 50,
+        format: $("#mine-format").value,
+      }),
+    });
+    const player = $("#mine-player");
+    player.src = res.url + "&t=" + Date.now();
+    player.play().catch(() => {});
+    toast("试听已生成");
+    // 追加试听记录（存百分比整数），刷新右侧列表；记录失败不影响试听
+    try {
+      const hist = await api("/api/mine/history", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text,
+          emotion: $("#mine-emotion").value || "默认",
+          rate: parseInt($("#mine-rate").value, 10) || 100,
+          pitch: parseInt($("#mine-pitch").value, 10) || 100,
+          volume: parseInt($("#mine-volume").value, 10) || 50,
+          format: $("#mine-format").value,
+          file: res.file,
+          url: res.url,
+        }),
+      });
+      renderMineHistory(hist.history);
+    } catch { /* 忽略记录失败 */ }
+  } catch (e) {
+    toast("试听失败: " + e.message, false);
+  }
+  busy(btn, false);
+}
+
+/* 我的音色：参数持久化 + 试听记录 */
+const MINE_DEFAULTS = { rate: 100, pitch: 100, volume: 50, format: "wav" };
+
+function applyMineSettings(s) {
+  const set = (id, val) => {
+    const el = $("#" + id);
+    if (el) el.value = val;
+  };
+  set("mine-rate", s.rate); set("mine-rate-num", s.rate);
+  set("mine-pitch", s.pitch); set("mine-pitch-num", s.pitch);
+  set("mine-volume", s.volume); set("mine-volume-num", s.volume);
+  set("mine-format", s.format);
+}
+
+async function loadMineSettings() {
+  try {
+    const res = await api("/api/mine/settings");
+    applyMineSettings(res.settings);
+  } catch { applyMineSettings(MINE_DEFAULTS); }
+}
+
+let mineSaveTimer = null;
+function scheduleMineSave() {
+  clearTimeout(mineSaveTimer);
+  mineSaveTimer = setTimeout(async () => {
+    try {
+      await api("/api/mine/settings", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          rate: parseInt($("#mine-rate").value, 10) || 100,
+          pitch: parseInt($("#mine-pitch").value, 10) || 100,
+          volume: parseInt($("#mine-volume").value, 10) || 50,
+          format: $("#mine-format").value,
+        }),
+      });
+    } catch { /* 保存失败静默，下次改动再试 */ }
+  }, 400);
+}
+
+async function resetMineSettings() {
+  try {
+    const res = await api("/api/mine/reset", { method: "POST" });
+    applyMineSettings(res.settings);
+    toast("已恢复默认设置");
+  } catch (e) {
+    toast("恢复失败: " + e.message, false);
+  }
+}
+
+async function loadMineHistory() {
+  try {
+    const res = await api("/api/mine/history");
+    renderMineHistory(res.history);
+  } catch { renderMineHistory([]); }
+}
+
+function renderMineHistory(history) {
+  const box = $("#mine-history-list");
+  if (!box) return;
+  const items = history || [];
+  if (!items.length) {
+    box.innerHTML = '<div class="history-empty">还没有试听记录，点左边「试听」试试</div>';
     return;
   }
-  try {
-    const { materials } = await api("/api/materials?voice=" + encodeURIComponent(v.name));
-    const total = materials.reduce((s, m) => s + m.size, 0);
-    $("#mt-count").textContent = materials.length ? `${materials.length} 条 · ${(total / 1024 / 1024).toFixed(2)} MB` : "（空）";
-    if (!materials.length) {
-      ul.innerHTML = `<li class="dim">还没有素材：点下方「一键补 3 条」或上传</li>`;
-    } else {
-      ul.innerHTML = materials.map((m) => `
-        <li>
-          <span class="grow">${esc(m.name)}</span>
-          <span class="mdur" data-dur="${esc(m.name)}"></span>
-          <span class="dim">${(m.size / 1024 / 1024).toFixed(2)} MB</span>
-          <button class="mini" data-play="${esc(m.name)}">试听</button>
-        </li>`).join("");
-      ul.querySelectorAll("[data-play]").forEach((b) =>
-        b.addEventListener("click", () =>
-          window.open(`/api/materials/file?voice=${encodeURIComponent(v.name)}&name=${encodeURIComponent(b.dataset.play)}`, "_blank")));
-      // 探测时长
-      materials.forEach((m) => {
-        const a = new Audio();
-        a.preload = "metadata";
-        a.src = `/api/materials/file?voice=${encodeURIComponent(v.name)}&name=${encodeURIComponent(m.name)}`;
-        a.addEventListener("loadedmetadata", () => {
-          const el = ul.querySelector(`[data-dur="${CSS.escape(m.name)}"]`);
-          if (el) el.textContent = fmtDur(a.duration);
-        });
-      });
-    }
-    enrollBtn.classList.toggle("hidden", v.provider === "fish" || v.provider === "kits");
-  } catch (e) {
-    ul.innerHTML = `<li class="dim">加载失败: ${esc(e.message)}</li>`;
-  }
-}
-
-async function loadMaterialSourceVoices() {
-  try {
-    const { voices } = await api("/api/voices");
-    const sel = $("#gm-source");
-    const usable = voices.filter((v) => (v.status || "ready") !== "failed" && v.provider !== "kits");
-    sel.innerHTML = usable.length
-      ? usable.map((v) => `<option value="${esc(v.name)}">${esc(v.name)}（${esc(v.provider)}）</option>`).join("")
-      : `<option value="">（先造一个音色：凭空造或用现成的）</option>`;
-  } catch (e) { /* ignore */ }
-}
-
-async function generateMaterial(text, btn, label) {
-  const v = currentVoice();
-  if (!v) return toast("先在右上选择音色", false);
-  const source = $("#gm-source").value;
-  if (!source) return toast("没有源音色：先「＋新建音色」造一个（凭空造或官方音色）", false);
-  busy(btn, true, label);
-  try {
-    const r = await api("/api/materials/generate", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text, voice_name: v.name, source_voice: source, rate: 1.0 }),
+  box.innerHTML = "";
+  items.forEach((h) => {
+    const item = document.createElement("div");
+    item.className = "history-item";
+    // 左侧主体：文本 + 元信息（点击回放）
+    const body = document.createElement("div");
+    body.className = "hi-body";
+    const meta = document.createElement("div");
+    meta.className = "hi-meta";
+    meta.textContent = `${h.time} · ${h.emotion} · 语速${h.rate} 音调${h.pitch} 音量${h.volume} · ${h.format}`;
+    const txt = document.createElement("div");
+    txt.className = "hi-text";
+    txt.textContent = h.text;
+    txt.title = h.text;
+    body.appendChild(txt);
+    body.appendChild(meta);
+    // 右侧导出按钮：下载该音频原文件
+    const exp = document.createElement("button");
+    exp.className = "hi-export";
+    exp.type = "button";
+    exp.textContent = "导出";
+    exp.title = "下载这条音频";
+    exp.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (!h.url) return;
+      const a = document.createElement("a");
+      a.href = h.url;
+      a.download = h.file || "";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
     });
-    return r;
-  } catch (e) {
-    toast("生成失败: " + e.message, false);
-    return null;
-  } finally {
-    busy(btn, false);
-  }
-}
-
-async function runGenerateOne() {
-  const text = $("#gm-text").value.trim();
-  if (!text) return toast("请填写生成文本", false);
-  const r = await generateMaterial(text, $("#gm-run"), "生成中…");
-  if (r) {
-    toast(`素材已生成：${r.material}（${(r.size / 1024).toFixed(0)} KB）`);
-    showMaterials();
-  }
-}
-
-async function runAutoFill() {
-  const btn = $("#gm-auto");
-  const v = currentVoice();
-  if (!v) return toast("先在右上选择音色", false);
-  for (let i = 0; i < AUTO_TEXTS.length; i++) {
-    const r = await generateMaterial(AUTO_TEXTS[i], btn, `生成中 ${i + 1}/3…`);
-    if (!r) return;
-    showMaterials();
-  }
-  toast("✅ 已补 3 条素材（约45秒），够克隆了！可点上方「注册正式音色」");
-}
-
-async function uploadAll(btn) {
-  const v = currentVoice();
-  if (!v) return toast("先在右上选择音色", false);
-  const files = Array.from(($("#mat-file").files) || []);
-  if (!files.length) return toast("请选择音频文件", false);
-  let ok = 0, fail = 0;
-  for (let i = 0; i < files.length; i++) {
-    busy(btn, true, `上传中 ${i + 1}/${files.length}`);
-    try {
-      const res = await fetch(`/api/materials/upload?voice=${encodeURIComponent(v.name)}`, {
-        method: "POST", body: files[i],
-        headers: { "X-Filename": encodeURIComponent(files[i].name) },
-      });
-      const data = await res.json().catch(() => null);
-      if (!res.ok) throw new Error((data && data.error) || `HTTP ${res.status}`);
-      ok++;
-    } catch (e) { fail++; toast(`${files[i].name} 上传失败: ${e.message}`, false); }
-  }
-  busy(btn, false);
-  if (ok) toast(`入库成功 ${ok} 个${fail ? `，失败 ${fail} 个` : ""}`);
-  $("#mat-file").value = "";
-  showMaterials();
-}
-
-async function runEnroll() {
-  const v = currentVoice();
-  if (!v) return toast("先选择音色", false);
-  const provider = $("#mt-enroll-provider").value || "bailian";
-  ensureProvider(provider, () => doEnroll(v.name, provider));
-}
-
-async function doEnroll(name, provider) {
-  const btn = $("#mt-enroll");
-  busy(btn, true, "注册中…（10~60秒）");
-  const box = $("#mt-enroll-result");
-  box.className = "result"; box.classList.remove("hidden");
-  box.textContent = `正在用素材在 ${provider} 注册正式音色…`;
-  try {
-    const res = await api("/api/voices/enroll", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ voice_name: name, provider }),
+    item.appendChild(body);
+    item.appendChild(exp);
+    body.addEventListener("click", () => {
+      if (!h.url) return;
+      const player = $("#mine-player");
+      player.src = h.url + "&t=" + Date.now();
+      player.play().catch(() => {});
     });
-    const e2 = res.voice;
-    box.className = "result ok";
-    box.textContent = `✅ 注册成功：${e2.name}（voice_id: ${e2.voice_id}）\n去 🎤 说话试试！`;
-    toast("音色注册成功");
-    loadVoices();
-  } catch (e) {
-    box.className = "result err";
-    box.textContent = "注册失败：" + e.message;
-  }
-  busy(btn, false);
+    box.appendChild(item);
+  });
 }
 
 /* ---------------- 🎧 声音大厅 ---------------- */
@@ -1464,17 +1513,6 @@ function wire() {
       }
     }, 300);
   });
-  on("#cur-voice", "change", (e) => {
-    state.current = e.target.value;
-    try { localStorage.setItem("shenglai.voice", state.current); } catch (err) {}
-    renderCurrent();
-    // 同步到服务端：/api/speak 不带 voice 参数时用她（QQ 机器人跟随这个）
-    api("/api/voices/current", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: e.target.value }),
-    }).catch(() => {});
-    toast("已切换到「" + state.current + "」");
-  });
   // 左下角更新提示：发现 git 新版本 → 一键更新（fetch+checkout+自动重启）
   let updateDismissed = false;
   async function checkUpdate() {
@@ -1552,11 +1590,31 @@ function wire() {
   on("#hall-q", "input", renderHall);
   on("#hall-gender", "change", renderHall);
   on("#hall-style", "change", renderHall);
-  // 我的：素材
-  on("#gm-auto", "click", runAutoFill);
-  on("#gm-run", "click", runGenerateOne);
-  on("#mat-file", "change", () => uploadAll($("#mat-file")));
-  on("#mt-enroll", "click", runEnroll);
+  // 我的：试听
+  on("#mine-audition-btn", "click", runMineAudition);
+  // 滑块与数字框双向联动（全整数，数字框输入自动夹到合法范围）
+  [["#mine-rate", "#mine-rate-num"], ["#mine-pitch", "#mine-pitch-num"], ["#mine-volume", "#mine-volume-num"]].forEach(([rSel, nSel]) => {
+    const r = $(rSel), n = $(nSel);
+    const clamp = (v) => {
+      const min = parseFloat(n.min), max = parseFloat(n.max);
+      v = Math.round(parseFloat(v));
+      if (isNaN(v)) v = parseFloat(n.value);
+      return Math.min(max, Math.max(min, v));
+    };
+    r.addEventListener("input", () => { n.value = r.value; });
+    n.addEventListener("input", () => {
+      if (n.value === "") return;
+      const v = clamp(n.value);
+      r.value = v; n.value = v;
+    });
+  });
+  // 恢复默认设置
+  on("#mine-reset-btn", "click", resetMineSettings);
+  // 参数改动 → 防抖持久化（滑块/数字框 input，格式 select change）
+  ["#mine-rate", "#mine-rate-num", "#mine-pitch", "#mine-pitch-num", "#mine-volume", "#mine-volume-num"].forEach((sel) => {
+    on(sel, "input", scheduleMineSave);
+  });
+  on("#mine-format", "change", scheduleMineSave);
   // 翻唱
   on("#sc-run", "click", runSing);
   on("#sc-reload", "click", loadCover);
@@ -1635,21 +1693,6 @@ function wire() {
       toast("操作出错: " + err.message, false);
     }
   });
-  // 素材拖拽
-  const drop = $("#drop");
-  if (drop) {
-    ["dragenter", "dragover"].forEach((ev) =>
-      drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add("drag"); }));
-    ["dragleave", "drop"].forEach((ev) =>
-      drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove("drag"); }));
-    drop.addEventListener("drop", (e) => {
-      if (e.dataTransfer && e.dataTransfer.files.length) {
-        $("#mat-file").files = e.dataTransfer.files;
-        toast("已选 " + e.dataTransfer.files.length + " 个文件，自动上传中…");
-        uploadAll($("#mat-file"));
-      }
-    });
-  }
 }
 
 (async function init() {
@@ -1658,7 +1701,6 @@ function wire() {
   await loadStatus();
   await loadVoices();
   switchTask("overview"); // 落地页 = 第一页「总览」
-  loadMaterialSourceVoices();
   loadCloneModels();
   loadOutputs();
 })();

@@ -32,7 +32,7 @@
     <h2 id="page-title">免费音色</h2>
     <div class="voicebar">
       <span id="cur-wrap" hidden><span class="vlabel">当前音色</span>
-      <select id="cur-voice" aria-label="当前音色"></select></span>
+      <span id="cur-voice" class="cur-voice-display" aria-label="当前音色"></span></span>
       <button id="btn-new" class="primary" type="button">＋ 造个声音</button>
       <button id="btn-quit" class="ghost quit-btn" type="button" title="关闭面板服务（之后重新双击桌面「声来」即可再开）">⏻ 关闭</button>
     </div>
@@ -168,45 +168,62 @@
   </section>
 
   <section id="task-mine" class="task" hidden>
-    <p class="pageintro">音色库总览：🟢 当前音色 = 发语音时用的声音。「去说话」→ 大厅合成；下面的素材区是给音色「喂样本」用的。</p>
+    <p class="pageintro">音色库总览：🟢 当前音色 = 发语音时用的声音。下面可以调整语速、音调、音量，并直接试听。</p>
     <div class="card" id="home-list">
       <h3>音色库 <span class="dim" id="mine-count"></span></h3>
       <div id="voice-list" class="voicegrid"></div>
     </div>
-    <div class="card">
-      <h3>📦 「<span id="mt-voice-label">—</span>」的素材 <span id="mt-count" class="dim"></span></h3>
-      <p class="hint">素材 = 这个声音的<b>样本录音</b>。用途只有一个：<b>克隆注册</b>——凑够 ≥10 秒干净素材，就能把它克隆成百炼/硅基等平台的正式音色。下面两个卡片就是补素材的两种方式。</p>
-      <ul id="mat-list" class="filelist"></ul>
-    </div>
-    <div class="card">
-      <h3>🧬 方式一：AI 补素材<span class="dim">——挑一个能说话的音色把稿子读出来，自动存为素材</span></h3>
-      <div class="mine-row">
-        <label>用什么声音读（源音色）<select id="gm-source"></select></label>
-        <label><span class="cap">自动生成并入库</span><button id="gm-auto" class="primary" style="width:100%" type="button">⚡ 一键补 3 条</button></label>
+    <div class="card" id="mine-voice-settings">
+      <div class="voice-settings-bar">
+        <label>语速
+          <input id="mine-rate" type="range" min="50" max="200" step="1" value="100">
+          <input id="mine-rate-num" class="vs-num" type="number" min="50" max="200" step="1" value="100">
+        </label>
+        <label>音调
+          <input id="mine-pitch" type="range" min="50" max="200" step="1" value="100">
+          <input id="mine-pitch-num" class="vs-num" type="number" min="50" max="200" step="1" value="100">
+        </label>
+        <label>音量
+          <input id="mine-volume" type="range" min="0" max="100" step="1" value="50">
+          <input id="mine-volume-num" class="vs-num" type="number" min="0" max="100" step="1" value="50">
+        </label>
+        <label>格式
+          <select id="mine-format">
+            <option value="wav">wav</option>
+            <option value="mp3">mp3</option>
+          </select>
+        </label>
+        <button id="mine-reset-btn" class="mine-reset-btn" type="button">恢复默认</button>
       </div>
-      <label>自定义生成文本<textarea id="gm-text" rows="2" placeholder="留空则用内置口播稿；50~80 字 ≈ 15~20 秒"></textarea></label>
-      <button id="gm-run" class="primary" type="button">生成 1 条自定义素材</button>
     </div>
-    <div class="card">
-      <h3>📁 方式二：上传素材<span class="dim">——已有这个人（或这段声音）的录音就直接传</span></h3>
-      <div id="drop" class="dropzone">
-        <p>把音频文件拖到这里（存入当前音色名下）</p>
-        <input id="mat-file" type="file" accept=".wav,.mp3,.m4a,.flac,.ogg,.opus,.aac" multiple>
+    <div class="mine-bottom">
+      <div class="card" id="mine-audition">
+        <h3>🎧 试听音色</h3>
+        <div class="audition-bar">
+          <label class="audition-emotion">语气
+            <select id="mine-emotion">
+              <option>默认</option>
+              <option>开心</option>
+              <option>兴奋</option>
+              <option>温柔</option>
+              <option>生气</option>
+              <option>委屈</option>
+              <option>难过</option>
+              <option>撒娇</option>
+              <option>困倦</option>
+              <option>得意</option>
+            </select>
+          </label>
+          <button id="mine-audition-btn" class="primary" type="button">试听</button>
+        </div>
+        <textarea id="mine-audition-text" rows="6">你好啊，这是我的声音</textarea>
+        <audio id="mine-player" controls></audio>
+      </div>
+      <div class="card" id="mine-history">
+        <h3>📝 试听记录</h3>
+        <div id="mine-history-list" class="history-list"></div>
       </div>
     </div>
-    <details class="card cover-guide">
-      <summary>⬆️ 进阶：把这些素材注册成其它平台的正式音色<span class="dim">（百炼复刻免费；适合想要更稳的云端音色时用）</span></summary>
-      <div class="mine-row" style="margin-top:10px">
-        <label><span class="cap">注册到</span><select id="mt-enroll-provider">
-          <option value="bailian">百炼 CosyVoice（复刻免费）</option>
-          <option value="fish">Fish Audio</option>
-          <option value="siliconflow">硅基流动</option>
-          <option value="elevenlabs">ElevenLabs</option>
-        </select></label>
-        <label><span class="cap">确认素材 ≥10 秒后</span><button id="mt-enroll" class="primary" style="width:100%" type="button">✅ 用这些素材注册正式音色</button></label>
-      </div>
-      <div id="mt-enroll-result" class="result hidden"></div>
-    </details>
   </section>
 
   <!-- 🎵 翻唱 -->

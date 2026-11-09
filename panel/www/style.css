@@ -70,6 +70,23 @@ body {
 .voicebar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .voicebar .vlabel { color: var(--muted); font-size: 12px; }
 .voicebar select { width: 200px; margin: 0; }
+.cur-voice-display {
+  display: inline-flex;
+  align-items: center;
+  width: 220px;
+  padding: 9px 11px;
+  background: var(--panel2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.2;
+  cursor: default;
+  user-select: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .pageintro { color: var(--muted); font-size: 13px; line-height: 1.7; margin: 6px 0 16px; max-width: 760px; }
 
 .chip {
@@ -220,27 +237,66 @@ button:disabled { opacity: .55; cursor: wait; }
 .filelist.capped { max-height: 380px; overflow-y: auto; padding-right: 4px; }
 .pv-name { min-width: 120px; }
 .pv-name b { font-size: 14px; }
-.voicegrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(215px, 1fr)); gap: 14px; }
+.voicegrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; }
 .voicecard {
   background: var(--panel); border: 1px solid var(--border);
-  border-radius: 10px; padding: 12px 14px; font-size: 13px;
+  border-radius: 12px; padding: 16px; font-size: 13px;
   transition: all .15s ease;
   display: flex; flex-direction: column;   /* 卡片纵向布局：按钮行永远贴底 */
 }
 .voicecard:hover { transform: translateY(-2px); border-color: var(--accent); box-shadow: 0 8px 20px rgba(0,0,0,.28); }
 .voicecard.hall-selected { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(79,140,255,.35); }
-.voicecard .vhead { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+/* 头部纵向：徽标左对齐、只占内容宽度（不被拉伸变长）；vrow 占满整行 */
+.voicecard .vhead { display: flex; flex-direction: column; align-items: stretch; gap: 10px; margin-bottom: 6px; }
+.voicecard .vbadge-row { display: flex; align-items: center; min-height: 20px; }
+.voicecard .vbadge-row .obadge { margin: 0; }
+.voicecard .vrow { display: flex; align-items: center; gap: 10px; min-width: 0; width: 100%; }
 .voicecard .avatar {
-  width: 34px; height: 34px; border-radius: 50%; flex: none;
+  width: 38px; height: 38px; border-radius: 50%; flex: none;
   display: inline-flex; align-items: center; justify-content: center;
-  font-size: 15px; color: #fff;
+  font-size: 16px; color: #fff;
 }
-.voicecard .actions { margin-top: auto; padding-top: 10px; display: flex; gap: 6px; }
-/* 按钮用固定内边距（不弹性拉伸）：同一颗按钮在任何卡片里都一样宽，跨卡对齐 */
+.voicecard .actions { margin-top: auto; padding-top: 14px; display: flex; justify-content: space-between; gap: 10px; }
+/* 按钮缩小、按内容定宽（不撑满），左侧排列、右侧留白，更有呼吸感 */
 .voicecard .actions button {
-  margin-top: 0; padding: 7px 13px; font-size: 12px;
-  flex: 0 0 auto; white-space: nowrap; text-align: center;
+  margin-top: 0; padding: 6px 18px; font-size: 12px;
+  flex: 0 0 auto; min-width: 64px; white-space: nowrap; text-align: center;
 }
+/* 名字行：名字占满中间、超长省略号，铅笔固定在右 */
+.voicecard .vname { font-size: 15px; flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.voicecard .vrow .mini { margin: 0; padding: 4px 8px; flex: none; }
+/* 改名输入框：放在头像旁边、占满名字区域（不独占一行，卡片不被撑高），宽度够大不溢出 */
+.voicecard .rename-input {
+  flex: 1 1 auto; width: auto; max-width: 100%; min-width: 0;
+  margin: 0; padding: 7px 10px; font-size: 13px;
+}
+/* 语音参数长条：语速/音调/音量滑块 + 格式，横向等宽分布、占满整行 */
+#mine-voice-settings .voice-settings-bar { display: flex; align-items: center; gap: 22px; flex-wrap: wrap; }
+#mine-voice-settings label { display: flex; align-items: center; gap: 8px; margin: 0; flex: 1 1 0; min-width: 140px; white-space: nowrap; }
+#mine-voice-settings input[type="range"] { flex: 1 1 auto; min-width: 50px; }
+#mine-voice-settings .vs-num { flex: none; width: 66px; padding: 5px 6px; font-size: 12px; text-align: center; }
+#mine-voice-settings select { flex: 1 1 auto; min-width: 0; max-width: 100%; width: 100%; }
+.mine-reset-btn { flex: none; padding: 6px 12px; font-size: 12px; white-space: nowrap; }
+/* 下半区：试听框与试听记录框左右等大、并排，同高 */
+.mine-bottom { display: flex; gap: 16px; align-items: stretch; }
+.mine-bottom > .card { flex: 1 1 0; min-width: 0; margin: 0; }
+/* 试听框：第一行语气下拉 + 试听按钮，下面文本框 */
+#mine-audition .audition-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+#mine-audition .audition-emotion { display: flex; align-items: center; gap: 8px; margin: 0; flex: 1 1 auto; min-width: 0; white-space: nowrap; }
+#mine-audition .audition-emotion select { flex: 1 1 auto; min-width: 0; width: 100%; }
+#mine-audition .audition-bar button { flex: none; }
+#mine-audition textarea { width: 100%; resize: vertical; }
+#mine-player { width: 100%; margin-top: 10px; }
+/* 试听记录框：记录区定高、超出滚动 */
+#mine-history { display: flex; flex-direction: column; }
+.history-list { flex: 1 1 auto; min-height: 260px; max-height: 360px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding-right: 4px; }
+.history-item { display: flex; align-items: center; gap: 10px; border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; background: rgba(255,255,255,.02); }
+.history-item:hover { border-color: var(--accent); }
+.history-item .hi-body { flex: 1 1 auto; min-width: 0; cursor: pointer; }
+.history-item .hi-text { font-size: 13px; margin-bottom: 5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.history-item .hi-meta { font-size: 11px; color: var(--muted); display: flex; gap: 8px; flex-wrap: wrap; }
+.history-item .hi-export { flex: none; padding: 4px 10px; font-size: 12px; }
+.history-empty { font-size: 13px; color: var(--muted); padding: 24px 0; text-align: center; }
 /* 我的音色页：注册行 / 补素材行——标题与控件顶对齐，两列等宽 */
 .mine-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: end; }
 .mine-row label { margin: 0; }

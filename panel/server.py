@@ -24,7 +24,7 @@ from lib import local_modules  # noqa: E402  本地引擎模块管理器
 from lib import usage as local_usage  # noqa: E402  用量记账
 from lib import local_update  # noqa: E402  更新检查与一键更新
 
-from lib import config, flows, library  # noqa: E402
+from lib import config, flows, library, mine  # noqa: E402
 from lib.providers import ProviderError, get_provider, list_providers  # noqa: E402
 
 WWW = PLUGIN_ROOT / "panel" / "www"
@@ -237,6 +237,10 @@ class Handler(BaseHTTPRequestHandler):
             if route == "/api/outputs/file":
                 name = urllib.parse.unquote((q.get("name") or [""])[0])
                 return self._audio_file(config.data_root() / "outputs" / name)
+            if route == "/api/mine/settings":
+                return self._json({"ok": True, "settings": mine.load_settings()})
+            if route == "/api/mine/history":
+                return self._json({"ok": True, "history": mine.list_history()})
             return self._json({"error": "not found"}, 404)
         except ProviderError as e:
             self._json({"error": str(e)}, 400)
@@ -376,6 +380,24 @@ class Handler(BaseHTTPRequestHandler):
                     str(body.get("voice_name") or ""),
                     also_cloud=bool(body.get("also_cloud")),
                 )})
+            if route == "/api/voices/rename":
+                body = self._body_json()
+                try:
+                    entry = library.rename_voice(
+                        str(body.get("from") or ""), str(body.get("to") or "")
+                    )
+                except (ValueError, FileNotFoundError) as e:
+                    raise ProviderError(str(e))
+                return self._json({"ok": True, "voice": entry})
+            if route == "/api/voices/sing-ready":
+                body = self._body_json()
+                try:
+                    entry = library.set_sing_ready(
+                        str(body.get("name") or ""), bool(body.get("ready"))
+                    )
+                except FileNotFoundError as e:
+                    raise ProviderError(str(e))
+                return self._json({"ok": True, "voice": entry})
             if route == "/api/quick-clone":
                 qv = lambda key, default="": urllib.parse.unquote((q.get(key) or [default])[0])  # noqa: E731
                 filename = Path(urllib.parse.unquote(
@@ -521,6 +543,12 @@ class Handler(BaseHTTPRequestHandler):
                 )
                 result["url"] = "/api/outputs/file?name=" + urllib.parse.quote(result["file"])
                 return self._json({"ok": True, **result})
+            if route == "/api/mine/settings":
+                return self._json({"ok": True, "settings": mine.save_settings(self._body_json())})
+            if route == "/api/mine/reset":
+                return self._json({"ok": True, "settings": mine.reset_settings()})
+            if route == "/api/mine/history":
+                return self._json({"ok": True, "history": mine.add_history(self._body_json())})
             return self._json({"error": "not found"}, 404)
         except ProviderError as e:
             self._json({"error": str(e)}, 400)

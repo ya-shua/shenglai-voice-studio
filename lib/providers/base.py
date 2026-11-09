@@ -69,14 +69,22 @@ def http_send(url, payload=None, headers=None, timeout=60, method=None):
     req = urllib.request.Request(
         url, data=data, headers=hdrs, method=method or ("POST" if data is not None else "GET")
     )
-    try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            return resp.read(), resp.headers.get("Content-Type", "")
-    except urllib.error.HTTPError as e:
-        detail = e.read().decode("utf-8", "replace")[:600]
-        raise ProviderError(f"HTTP {e.code} 来自 {url}\n{detail}") from None
-    except urllib.error.URLError as e:
-        raise ProviderError(f"无法连接 {url}\n{e.reason}") from None
+    # 瞬时网络错误（连接重置/超时/断连）自动重试，HTTP 业务错误不重试
+    retries = 2
+    attempt = 0
+    while True:
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                return resp.read(), resp.headers.get("Content-Type", "")
+        except urllib.error.HTTPError as e:
+            detail = e.read().decode("utf-8", "replace")[:600]
+            raise ProviderError(f"HTTP {e.code} 来自 {url}\n{detail}") from None
+        except (urllib.error.URLError, TimeoutError, ConnectionError) as e:
+            reason = getattr(e, "reason", e)
+            if attempt >= retries:
+                raise ProviderError(f"无法连接 {url}\n{reason}") from None
+            time.sleep(1.5 * (attempt + 1))
+            attempt += 1
 
 
 def http_json(url, payload=None, headers=None, timeout=60) -> dict:

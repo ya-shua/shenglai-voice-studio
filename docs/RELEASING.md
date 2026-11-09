@@ -11,7 +11,7 @@
 | 远端仓库 | https://github.com/ya-shua/shenglai-voice-studio |
 | 默认分支 | `main` |
 | 许可证 | MIT |
-| 本地仓库根 | `D:\AI\插件\plugins\voice-studio`（和插件源在一起，改完直接提交） |
+| 本地仓库根 | `插件目录（本地仓库根）`（和插件源在一起，改完直接提交） |
 | 插件市场清单 | `D:\AI\插件\plugins\marketplace.json`（与本插件同仓储外的一级目录） |
 
 > 只提交**插件本体**（代码 / 面板 / 文档 / 清单）。设计稿、实验数据、截图素材不要进仓库。
@@ -39,7 +39,7 @@ D:\AI\插件\plugins\marketplace.json "version": "x.y.z"
 ## 二、提交（本地 git）
 
 ```powershell
-cd D:\AI\插件\plugins\voice-studio
+cd 插件目录（本地仓库根）
 git status --short          # 先看清楚改了什么
 git add -A
 git commit -m "feat: 一句话说清改了什么；vx.y.z"
@@ -69,7 +69,7 @@ git commit -m "feat: 一句话说清改了什么；vx.y.z"
 **不要把 token 写进 `.git/config` 或任何文件**，用一次性环境变量传：
 
 ```powershell
-cd D:\AI\插件\plugins\voice-studio
+cd 插件目录（本地仓库根）
 $pat = (Get-Content "<PAT 文件路径（勿写进仓库）>" -Raw).Trim()
 $b64 = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes("x-access-token:$pat"))
 $env:GIT_CONFIG_COUNT = "1"
@@ -106,7 +106,7 @@ curl.exe -s -o NUL -w "api    %{http_code}\n" --max-time 10 https://api.github.c
 import base64, json, subprocess, sys, urllib.request
 from pathlib import Path
 
-ROOT = Path(r"D:\AI\插件\plugins\voice-studio")
+ROOT = Path(r"插件目录（本地仓库根）")
 TOKEN = Path(r"<PAT 文件路径（勿写进仓库）>").read_text(encoding="utf-8").strip()
 OWNER, REPO = "ya-shua", "shenglai-voice-studio"
 API = "https://api.github.com"

@@ -105,7 +105,7 @@ pip install demucs
 |---|---|
 | 仓库 | https://github.com/ya-shua/shenglai-voice-studio （Public · MIT · `main`） |
 | 下载 | [main.zip](https://github.com/ya-shua/shenglai-voice-studio/archive/refs/heads/main.zip) |
-| 本地仓库 | 就在插件目录 `D:\AI\插件\plugins\voice-studio` |
+| 本地仓库 | 就在插件目录 `插件目录（本地仓库根）` |
 
 发版三件事：
 
