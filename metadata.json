@@ -5,6 +5,24 @@
   "version": "1.9.0",
   "author": "ya-shua",
   "description": "声音工作台：克隆 / 说话 / 翻唱。海螺通过 MCP 调它合成语音。",
+  "capabilities": [
+    "一句话克隆音色（≥10 秒干净人声）",
+    "文本合成语音（语速/音调/音量/情绪可调）",
+    "AI 声音设计（文字描述直接生成音色）",
+    "歌曲翻唱与换声（人声分离 + 换声 + 混回伴奏）",
+    "多供应商接入（百炼/MiMo/硅基流动/ElevenLabs/Fish/Kits + 自定义）",
+    "音色、素材与产出管理"
+  ],
+  "standalone": {
+    "works_alone": true,
+    "needs": [
+      "Python 3.9+（仅标准库，无第三方依赖）",
+      "任一 TTS 供应商的 API Key（小米 MiMo 目前限时免费即可起步）",
+      "可选：ffmpeg（mp3 混音）、本机 Seed-VC（免费翻唱）"
+    ],
+    "how": "python panel/server.py --port 17878，浏览器打开 http://127.0.0.1:17878/ 即可用，不需要海螺。"
+  },
+  "contract": "docs/对接.md",
   "builtin": false,
   "kind": "app",
   "page": "http://127.0.0.1:17878/",
@@ -21,5 +39,28 @@
   },
   "source": {
     "repo": ""
+  },
+  "mcp": {
+    "entry": "mcp/server.py",
+    "runtime": "python",
+    "args": [],
+    "tools": [
+      "voice_catalog",
+      "voice_clone_universal",
+      "voice_convert",
+      "voice_design",
+      "voice_enroll",
+      "voice_library",
+      "voice_material_add",
+      "voice_material_generate",
+      "voice_mimo_tts",
+      "voice_panel",
+      "voice_provider_setup",
+      "voice_quick_clone",
+      "voice_register_manual",
+      "voice_sing",
+      "voice_status",
+      "voice_tts"
+    ]
   }
 }

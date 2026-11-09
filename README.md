@@ -17,7 +17,7 @@
 | 🎙️ 说话 | 用当前音色合成（语速/音调/音量调参）+ **MiMo 快速试玩**（内置音色 / 声音设计 / 声音克隆·全模型通用）+ A/B 对比 + 产出记录 |
 | 🧬 素材 | ⚡一键补 3 条（AI 朗读口播稿直接入库）+ 拖拽上传 + 时长探测 + 四家注册通道 |
 | 🎧 音色大厅 | 聚合 25+ 官方免费音色，男女/风格筛选（温柔型/活力型/沉稳型…）、搜索、在线试听、一键登记使用 |
-| 🎵 翻唱 | 双引擎：**本地 Seed-VC（免费）** 或 Kits.AI（付费）；人声/伴奏分离 → 只换人声 → 混回伴奏（`voice_sing`）；清唱直接换声（`voice_convert`） |
+| 🎵 翻唱 | 双引擎：**本地 Seed-VC（免费）** 或 Kits.AI（付费）；人声/伴奏分离 → 只换人声 → 混回伴奏（对外 `voice_sing`，清唱换声在内部自动完成） |
 | 设置 | 模型接入（DS 式：状态行列表 + ＋添加模型双页签 + 按需引导弹窗）+ 自定义模型 |
 
 ## 供应商矩阵（6 内置 + 万能自定义）
@@ -71,15 +71,18 @@ pip install demucs
 └── voices.json      # 音色注册表（名称/供应商/voice_id/模型/素材）
 ```
 
-## MCP 工具清单（16）
+## MCP 对外接口（2）
 
-`voice_status` · `voice_provider_setup` · `voice_material_add` · `voice_enroll` · `voice_quick_clone` · `voice_register_manual` · `voice_catalog` · `voice_design` · `voice_material_generate` · `voice_mimo_tts` · `voice_clone_universal` · `voice_convert` · `voice_sing` · `voice_tts` · `voice_library` · `voice_panel`
+对外只暴露两个工具；其余能力（配 Key、注册/克隆、素材、换声、声音大厅、供应商路由、面板等）全部内部实现，管理统一在 Web 面板完成：
+
+- `voice_speak` —— 说话：文本 → 语音。`voice_name` 省略时用当前音色；可选 emotion 情绪、rate 语速、pitch 音调、volume 音量、format 格式
+- `voice_sing` —— 唱歌：歌曲 → 稳定翻唱成品。`voice_name` 省略时用当前音色；engine 可选 kits（云端）/ local-svc（本机免费）
 
 ## 架构
 
 ```
 声来插件
-├── MCP 服务器（stdio，16 工具）──────── AI 对话驱动入口
+├── MCP 服务器（stdio，对外 2 接口：说话/唱歌）── AI 对话驱动入口
 ├── Web 面板（127.0.0.1:17878）──────── 任务流工作台
 ├── 供应商适配层（capabilities 声明式）
 │   ├── mimo / bailian / fish / siliconflow / elevenlabs / kits

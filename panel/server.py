@@ -13,6 +13,7 @@ import sys
 import threading
 import time
 import urllib.parse
+from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -28,6 +29,9 @@ from lib import config, flows, library, mine  # noqa: E402
 from lib.providers import ProviderError, get_provider, list_providers  # noqa: E402
 
 WWW = PLUGIN_ROOT / "panel" / "www"
+METADATA_FILE = PLUGIN_ROOT / "metadata.json"
+STARTED_AT = time.time()  # 进程启动时刻（uptime 基准）
+STARTED_ISO = datetime.now().astimezone().isoformat(timespec="seconds")
 
 STATIC_TYPES = {
     ".html": "text/html; charset=utf-8",
@@ -58,6 +62,39 @@ def api_status() -> dict:
         "material_voices": library.list_material_voices(),
         "outputs_count": len(library.list_outputs(500)),
         "ffmpeg": bool(shutil.which("ffmpeg")),
+    }
+
+
+def plugin_metadata() -> dict:
+    """仓库根 metadata.json 原文（身份以文件为准；读不到时给最小可用身份，不让面板挂掉）。"""
+    try:
+        data = json.loads(METADATA_FILE.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
+    except (OSError, json.JSONDecodeError):
+        return {"id": "voice", "version": config.VERSION}
+
+
+def api_health() -> dict:
+    """只读探活：宿主据此判断「这是谁、什么版本、活了多久」。"""
+    meta = plugin_metadata()
+    return {
+        "ok": True,
+        "id": str(meta.get("id") or "voice"),
+        "version": config.VERSION,  # 真实版本只维护在 lib/config.py
+        "uptime_s": int(time.time() - STARTED_AT),
+    }
+
+
+def api_manifest(port: int) -> dict:
+    """只读身份与运行态：metadata 全文 + 实际监听端口 / pid / 启动时间。"""
+    return {
+        "ok": True,
+        "metadata": plugin_metadata(),
+        "runtime": {
+            "port": int(port),
+            "pid": os.getpid(),
+            "started_at": STARTED_ISO,
+        },
     }
 
 
@@ -166,6 +203,11 @@ class Handler(BaseHTTPRequestHandler):
                 return self._static(WWW / route.lstrip("/"))
             if route == "/api/status":
                 return self._json(api_status())
+            if route == "/api/health":
+                return self._json(api_health())
+            if route == "/api/manifest":
+                # 端口以实际监听为准（--port 被占用时 main() 会自动 +1）
+                return self._json(api_manifest(self.server.server_address[1]))
             if route == "/api/config":
                 return self._json(config.public_config())
             if route == "/api/providers":
@@ -492,7 +534,6 @@ class Handler(BaseHTTPRequestHandler):
             if route == "/api/warm-previews":
                 body = self._body_json()
                 pid = str(body.get("provider") or (urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query).get("provider") or [""])[0])
-                import threading
                 def _warm():
                     try:
                         n = flows.warm_previews(pid)

@@ -269,7 +269,7 @@ def tool_convert(args: dict) -> str:
     )
 
 
-def tool_sing(args: dict) -> str:
+def tool_sing_cover(args: dict) -> str:
     r = flows.sing_cover(
         args.get("song_path") or "",
         args.get("voice_name") or "",
@@ -416,275 +416,109 @@ def tool_panel(args: dict) -> str:
     )
 
 
-HANDLERS = {
-    "voice_status": tool_status,
-    "voice_provider_setup": tool_provider_setup,
-    "voice_material_add": tool_material_add,
-    "voice_enroll": tool_enroll,
-    "voice_quick_clone": tool_quick_clone,
-    "voice_register_manual": tool_register_manual,
-    "voice_catalog": tool_catalog,
-    "voice_design": tool_design,
-    "voice_material_generate": tool_material_generate,
-    "voice_convert": tool_convert,
-    "voice_sing": tool_sing,
-    "voice_mimo_tts": tool_mimo_tts,
-    "voice_clone_universal": tool_clone_universal,
-    "voice_tts": tool_tts,
-    "voice_library": tool_library,
-    "voice_panel": tool_panel,
-}
+# ---------------- 对外门面（facade） ----------------
+# 设计：MCP 对外只暴露「说话 voice_speak」「唱歌 voice_sing」两个工具；
+# 上面的 tool_* 全部是内部能力（配 Key、注册、克隆、素材、换声等），由门面内部编排，
+# 管理类操作统一引导用户在 Web 面板完成。
 
-_OBJ = {"type": "object", "properties": {}, "additionalProperties": False}
+def _resolve_voice(voice_name) -> str:
+    """解析目标音色：显式指定优先，否则用当前音色；都没有则引导去面板。"""
+    name = library.sanitize_name(voice_name or "")
+    if name == "unnamed":
+        name = library.sanitize_name(library.get_current_voice())
+    if name == "unnamed":
+        raise ProviderError(
+            "没有可用音色：请先在 Web 面板注册音色并设为当前音色（/voice:panel 打开面板）。"
+        )
+    return name
+
+
+def tool_speak(args: dict) -> str:
+    """对外·说话：文本 → 语音（默认用当前音色）。"""
+    name = _resolve_voice(args.get("voice_name"))
+    opts = {}
+    for key in ("format", "sample_rate", "rate", "pitch", "volume", "emotion", "style"):
+        if args.get(key) is not None:
+            opts[key] = args[key]
+    result = flows.synthesize(args.get("text") or "", name, opts)
+    return (
+        f"✅ 说话完成（音色「{result['voice']}」）\n"
+        f"文件: {result['path']}\n"
+        f"AUDIO: {result['path']}\n"
+        f"大小 {result['size'] / 1024:.0f} KB · 格式 {result['ext']}"
+    )
+
+
+def tool_sing(args: dict) -> str:
+    """对外·唱歌：歌曲 → 稳定翻唱成品（默认用当前音色）。"""
+    name = _resolve_voice(args.get("voice_name"))
+    r = flows.sing_cover(
+        args.get("song_path") or "",
+        name,
+        strength=float(args.get("strength") or 0.8),
+        pitch_shift=int(args.get("pitch_shift") or 0),
+        engine=(args.get("engine") or "kits"),
+    )
+    lines = [f"✅ 唱歌完成（{r['voice']} × {r['song']}）"]
+    if r.get("final"):
+        lines.append(f"成品: {r['final']}\n混音方式: {r['mix_method']}")
+    lines.append(f"换声干声: {r['converted']}")
+    if r.get("backing"):
+        lines.append(f"原曲伴奏: {r['backing']}")
+    lines.append("伴奏全程未动，只换人声音色，保证稳定。")
+    return "\n".join(lines)
+
+
+# 对外工具契约：只有这两个会出现在 tools/list
+HANDLERS = {
+    "voice_speak": tool_speak,
+    "voice_sing": tool_sing,
+}
 
 TOOLS = [
     {
-        "name": "voice_status",
-        "description": "声来体检：数据目录、供应商配置状态（密钥脱敏）、音色与产出概况。任何音色操作前先调用。",
-        "inputSchema": _OBJ,
-    },
-    {
-        "name": "voice_provider_setup",
+        "name": "voice_speak",
         "description": (
-            "配置供应商。bailian（阿里云百炼，内置）：api_key 必填（sk- 开头），可选 workspace_id 与 "
-            "target_model；custom:<id>：在 custom_config 中以 JSON 模板自由接入任意 OpenAI 风格 TTS 接口，"
-            "占位符 {{api_key}}/{{text}}/{{voice_id}}。"
+            "说话：把文本合成为语音，产出 wav/mp3 文件并返回路径。"
+            "voice_name 省略时用当前音色。可选 emotion 情绪、style 语气描述、rate 语速 0.5~2.0、"
+            "pitch 音调 0.5~2.0、volume 音量 0~100、format 格式。"
+            "caller 可直接给 rate/pitch 数值覆盖心情预设；style 与 emotion 不要同时传。"
+            "配 Key、注册/克隆音色等管理操作请在 Web 面板完成。"
         ),
         "inputSchema": {
             "type": "object",
             "properties": {
-                "provider": {"type": "string", "description": "bailian 或 custom:<id>"},
-                "api_key": {"type": "string", "description": "API 密钥"},
-                "workspace_id": {"type": "string", "description": "百炼 Workspace ID（可选，启用 v3/v3.5）"},
-                "target_model": {"type": "string", "description": "默认目标模型，如 cosyvoice-v2"},
-                "custom_config": {
-                    "type": "object",
-                    "description": "custom:<id> 的完整定义：url/headers/body/audio_from/voice_id/display_name/ext",
-                },
-            },
-            "required": ["provider"],
-        },
-    },
-    {
-        "name": "voice_material_add",
-        "description": "把本地音频素材复制入库到指定音色名下。要求：≥10 秒清晰人声、无伴奏/混响/噪音，wav/mp3/m4a。",
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "voice_name": {"type": "string", "description": "音色名"},
-                "file_path": {"type": "string", "description": "音频文件绝对路径"},
-            },
-            "required": ["voice_name", "file_path"],
-        },
-    },
-    {
-        "name": "voice_enroll",
-        "description": "用已入库素材在供应商侧注册（克隆）音色（声音复刻，约 10~60 秒），登记 voice_id 到音色库。默认用第一个素材。",
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "voice_name": {"type": "string", "description": "音色名（素材已入库在该名下）"},
-                "provider": {"type": "string", "description": "供应商 id，默认 bailian"},
-                "material_file": {"type": "string", "description": "指定素材文件名（默认第一个）"},
-                "note": {"type": "string", "description": "备注"},
-            },
-            "required": ["voice_name"],
-        },
-    },
-    {
-        "name": "voice_register_manual",
-        "description": "手动登记音色：音色已在供应商控制台创建（或自定义供应商的固定 voice_id）时，直接登记到本地音色库。",
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "voice_name": {"type": "string"},
-                "provider": {"type": "string", "description": "bailian 或 custom:<id>"},
-                "voice_id": {"type": "string"},
-                "target_model": {"type": "string", "description": "绑定模型（百炼复刻音色需要）"},
-                "note": {"type": "string"},
-            },
-            "required": ["voice_name", "provider", "voice_id"],
-        },
-    },
-    {
-        "name": "voice_tts",
-        "description": "用已注册音色把文本合成为语音，产出 wav/mp3 文件并返回路径。调试参数：rate 语速 0.5~2.0、pitch 音调 0.5~2.0、volume 音量 0~100、emotion 情绪（让声音带上情绪波动）。",
-        "inputSchema": {
-            "type": "object",
-            "properties": {
                 "text": {"type": "string", "description": "要合成的文本"},
-                "voice_name": {"type": "string", "description": "已注册的音色名"},
-                "emotion": {"type": "string", "enum": ["默认", "开心", "兴奋", "温柔", "生气", "委屈", "难过", "撒娇", "困倦", "得意"], "description": "情绪：自动折算语速/音调/音量，MiMo 音色还带原生语气。默认 默认"},
-                "mood": {"type": "string", "enum": ["", "tide"], "description": "mood=tide：忽略 emotion，语速/音调/语气全部跟随 tide 心情引擎的实时情绪（更细腻）"},
+                "voice_name": {"type": "string", "description": "目标音色名，省略用当前音色"},
+                "emotion": {"type": "string", "enum": ["默认", "开心", "兴奋", "温柔", "生气", "委屈", "难过", "撒娇", "困倦", "得意"], "description": "情绪，默认 默认"},
                 "format": {"type": "string", "enum": ["wav", "mp3"], "description": "默认 wav"},
                 "sample_rate": {"type": "integer", "description": "默认 24000"},
                 "rate": {"type": "number", "description": "语速 0.5~2.0，默认 1.0"},
                 "pitch": {"type": "number", "description": "音调 0.5~2.0，默认 1.0"},
                 "volume": {"type": "integer", "description": "音量 0~100，默认 50"},
+                "style": {"type": "string", "description": "语气描述，如「语速偏快，句尾上扬」。省略则按 emotion 或基准"},
             },
-            "required": ["text", "voice_name"],
-        },
-    },
-    {
-        "name": "voice_library",
-        "description": "查看音色/素材/产出列表。section 可选 voices / materials / outputs / all。",
-        "inputSchema": {
-            "type": "object",
-            "properties": {"section": {"type": "string", "enum": ["voices", "materials", "outputs", "all"]}},
-        },
-    },
-    {
-        "name": "voice_quick_clone",
-        "description": (
-            "一句话快速克隆（GPT-SoVITS 式体验的云端版）：一段音频（≥10秒清晰人声）+ 文本 → "
-            "临时注册音色 → 立刻合成 → 默认用后即弃自动清理。keep_voice=true 且给 voice_name 时正式保留音色。"
-        ),
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "audio_path": {"type": "string", "description": "参考音频文件路径（≥10秒，wav/mp3/m4a）"},
-                "text": {"type": "string", "description": "要用这个音色说的话"},
-                "voice_name": {"type": "string", "description": "音色名（keep_voice 时必填，否则自动临时名）"},
-                "keep_voice": {"type": "boolean", "description": "是否保留音色到音色库，默认 false"},
-                "provider": {"type": "string", "description": "默认 bailian"},
-                "rate": {"type": "number", "description": "语速 0.5~2.0"},
-                "pitch": {"type": "number", "description": "音调 0.5~2.0"},
-                "volume": {"type": "integer", "description": "音量 0~100"},
-            },
-            "required": ["audio_path", "text"],
-        },
-    },
-    {
-        "name": "voice_catalog",
-        "description": (
-            "列出供应商可用音色目录（自由选模型）：bailian 返回官方预置音色（免克隆），"
-            "fish 返回用户账号下的克隆音色模型。配合 voice_register_manual 登记后即可合成。"
-        ),
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "provider": {"type": "string", "description": "可选，默认列出全部已配置供应商"}
-            },
-        },
-    },
-    {
-        "name": "voice_design",
-        "description": (
-            "AI 生成音色（声音设计）：用一句文字描述直接生成专属音色，完全不需要素材。"
-            "需百炼 Workspace ID（走 MaaS，仅 cosyvoice-v3/v3.5 系列）。返回音色登记与试听文件路径。"
-        ),
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "voice_name": {"type": "string"},
-                "description": {"type": "string", "description": "声音描述，如：年轻女性，声音清亮干净，语速适中（≤500字）"},
-                "preview_text": {"type": "string", "description": "试听文本（15~200字），留空用默认"},
-                "target_model": {"type": "string", "description": "默认 cosyvoice-v3.5-plus"},
-                "language": {"type": "string", "description": "zh / en，默认 zh"},
-                "save_preview_material": {"type": "boolean", "description": "把试听音频存入素材库"},
-            },
-            "required": ["voice_name", "description"],
-        },
-    },
-    {
-        "name": "voice_material_generate",
-        "description": (
-            "模型生成素材：用已登记/官方音色把文本读成音频，直接存为某音色名下的素材"
-            "（生成的音频干净无噪，天然满足克隆要求）。凑够 ≥10 秒后 voice_enroll 克隆。"
-        ),
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "text": {"type": "string", "description": "要读的文本，50~80字约15~20秒"},
-                "voice_name": {"type": "string", "description": "素材归属的音色名"},
-                "source_voice": {"type": "string", "description": "用哪个已登记音色来读"},
-                "rate": {"type": "number"},
-                "pitch": {"type": "number"},
-                "volume": {"type": "integer"},
-            },
-            "required": ["text", "voice_name", "source_voice"],
-        },
-    },
-    {
-        "name": "voice_convert",
-        "description": (
-            "清唱/干声换声：把一段人声音频换成目标音色。默认 engine=kits（Kits.AI 网页端多素材训练的唱歌音色）；"
-            "engine=local-svc 用本机 Seed-VC（完全免费，音色 voice_id 填参考音频路径）。"
-            "要出完整翻唱歌曲请用 voice_sing。strength 转换强度 0~1，pitch_shift 半音偏移 -24~24。"
-        ),
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "audio_path": {"type": "string", "description": "干声文件（wav/mp3/flac）"},
-                "voice_name": {"type": "string", "description": "已登记的音色（对应引擎）"},
-                "strength": {"type": "number", "description": "0~1，默认 0.8"},
-                "pitch_shift": {"type": "integer", "description": "半音偏移，默认 0"},
-                "engine": {"type": "string", "enum": ["kits", "local-svc"], "description": "引擎，默认 kits"},
-            },
-            "required": ["audio_path", "voice_name"],
+            "required": ["text"],
         },
     },
     {
         "name": "voice_sing",
         "description": (
-            "稳定翻唱流水线：歌曲 → 人声/伴奏分离 → 人声换声 → 混回伴奏 → 成品。"
-            "engine=local-svc 走本机 demucs + Seed-VC，全程免费（CPU 约 3~10 分钟）；"
-            "engine=kits 走云端（需 Key，约 1~5 分钟）。伴奏全程不动只换人声，保证稳定性。"
+            "唱歌：稳定翻唱流水线——歌曲人声/伴奏分离 → 人声换声 → 混回伴奏 → 成品。"
+            "voice_name 省略时用当前音色。engine=local-svc 走本机免费引擎（慢），"
+            "engine=kits 走云端（需 Key，约 1~5 分钟）。伴奏全程不动只换人声。"
         ),
         "inputSchema": {
             "type": "object",
             "properties": {
                 "song_path": {"type": "string", "description": "歌曲文件（wav/mp3/flac/webm ≤50MB）"},
-                "voice_name": {"type": "string", "description": "已登记的音色（对应引擎）"},
-                "strength": {"type": "number", "description": "0~1，默认 0.8"},
-                "pitch_shift": {"type": "integer", "description": "半音偏移（适配音域），默认 0"},
+                "voice_name": {"type": "string", "description": "目标音色名，省略用当前音色"},
+                "strength": {"type": "number", "description": "转换强度 0~1，默认 0.8"},
+                "pitch_shift": {"type": "integer", "description": "半音偏移，默认 0"},
                 "engine": {"type": "string", "enum": ["kits", "local-svc"], "description": "引擎，默认 kits"},
             },
-            "required": ["song_path", "voice_name"],
+            "required": ["song_path"],
         },
-    },
-    {
-        "name": "voice_mimo_tts",
-        "description": (
-            "小米 MiMo TTS 三模式直接合成（当前限时免费）：mode=builtin 用内置音色（冰糖/茉莉/苏打/白桦/Mia/Chloe/Milo/Dean，"
-            "支持风格指令与 (唱歌) 标签）；mode=design 用音色描述直接生成；mode=clone 传参考音频一句话复刻（mp3/wav，10~30秒）。"
-        ),
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "mode": {"type": "string", "enum": ["builtin", "design", "clone"]},
-                "text": {"type": "string", "description": "要合成的文本"},
-                "style": {"type": "string", "description": "风格指令（builtin/clone 用），如：用开心的语气"},
-                "voice": {"type": "string", "description": "builtin 模式的内置音色名，默认 mimo_default"},
-                "voice_prompt": {"type": "string", "description": "design 模式的音色描述"},
-                "reference_audio_path": {"type": "string", "description": "clone 模式的参考音频路径"},
-            },
-            "required": ["mode", "text"],
-        },
-    },
-    {
-        "name": "voice_clone_universal",
-        "description": (
-            "通用音色克隆（所有模型统一入口）：provider=mimo 参考音频内联直传一次出声；"
-            "provider=bailian/fish/siliconflow/elevenlabs 自动「临时注册→合成→清理」。"
-            "参考音频 mp3/wav，10~30 秒。keep=true 时保留注册的音色。"
-        ),
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "provider": {"type": "string", "description": "mimo / bailian / fish / siliconflow / elevenlabs"},
-                "text": {"type": "string", "description": "要合成的文本"},
-                "reference_audio_path": {"type": "string", "description": "参考音频路径（mp3/wav，10~30秒）"},
-                "style": {"type": "string", "description": "风格指令（部分模型支持）"},
-                "keep": {"type": "boolean", "description": "保留注册的音色，默认 false"},
-            },
-            "required": ["provider", "text", "reference_audio_path"],
-        },
-    },
-    {
-        "name": "voice_panel",
-        "description": "启动（或复用已运行的）本地 Web 控制面板，返回 http://127.0.0.1:<port> 访问地址。",
-        "inputSchema": _OBJ,
     },
 ]
 
