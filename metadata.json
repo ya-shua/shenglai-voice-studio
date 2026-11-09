@@ -2,7 +2,7 @@
   "id": "voice",
   "name": "声来",
   "name_en": "ShengLai",
-  "version": "1.9.0",
+  "version": "1.9.1",
   "author": "ya-shua",
   "description": "声音工作台：克隆 / 说话 / 翻唱。海螺通过 MCP 调它合成语音。",
   "capabilities": [
